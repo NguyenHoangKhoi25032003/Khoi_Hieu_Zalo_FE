@@ -1,15 +1,19 @@
-// components/User.js
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Footer from './Footer'; // Import Footer component
+
+// Import ảnh từ thư mục img
+import profileImage from '../img/unnamed.png';  // Đảm bảo đường dẫn chính xác
 
 const User = () => {
   return (
     <View style={styles.container}>
       {/* User Profile */}
       <View style={styles.profileContainer}>
+        {/* Hiển thị ảnh đã import từ thư mục */}
         <Image
-          source={{ uri: 'https://via.placeholder.com/100' }}
+          source={profileImage}  // Sử dụng ảnh đã import
           style={styles.profileImage}
         />
         <Text style={styles.profileName}>Công Hiếu</Text>
@@ -48,6 +52,9 @@ const User = () => {
           <Ionicons name="lock-closed" size={24} color="blue" />
           <Text style={styles.settingText}>Quyền riêng tư</Text>
         </TouchableOpacity>
+
+      {/* Footer */}
+      <Footer navigation={navigation} />
       </ScrollView>
     </View>
   );

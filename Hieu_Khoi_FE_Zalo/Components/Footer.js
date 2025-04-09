@@ -8,19 +8,23 @@ const Footer = ({ navigation }) => {
     <View style={styles.container}>
       <TouchableOpacity style={styles.icon}>
         <Ionicons name="chatbubbles" size={24} color="black" />
-        <Text>Messages</Text>
+        <Text>Tin nhắn</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.icon}>
         <Ionicons name="people" size={24} color="black" />
-        <Text>Contacts</Text>
+        <Text>Danh bạ</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.icon}>
         <Ionicons name="search" size={24} color="black" />
-        <Text>Explore</Text>
+        <Text>Khám phá</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.icon}>
+        <Ionicons name="book" size={24} color="black" />
+        <Text>Nhật ký</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.icon} onPress={() => navigation.navigate('User')}>
         <Ionicons name="person" size={24} color="black" />
-        <Text>Profile</Text>
+        <Text>Cá nhân</Text>
       </TouchableOpacity>
     </View>
   );
