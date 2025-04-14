@@ -1,64 +1,114 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { API_URL } from '../config';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 
-export default function RegisterScreen({ navigation }) {
-  const [name, setName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [gender, setGender] = useState('Nam'); // Mặc định là Nam
-  const [day, setDay] = useState('1');
-  const [month, setMonth] = useState('1');
-  const [year, setYear] = useState('2000');
+export default function RegisterScreen() {
   const [step, setStep] = useState(1);
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigation = useNavigation();
+  const route = useRoute();
 
-  const validatePhoneNumber = (number) => {
-    return /^\d{10,11}$/.test(number);
+  const validateEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  const handleNext = () => {
+  const validatePassword = (password) => {
+    return password.length >= 6;
+  };
+
+  // Xử lý deep link khi ứng dụng đang mở
+  useEffect(() => {
+    const handleDeepLink = ({ url }) => {
+      const { path, queryParams } = Linking.parse(url);
+      if (path === 'api/auth/verify-email' && queryParams?.token) {
+        navigation.navigate('VerifyEmail', { token: queryParams.token });
+      }
+    };
+
+    // Lắng nghe deep link khi ứng dụng đang mở
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    // Kiểm tra deep link khi ứng dụng được mở từ trạng thái đóng
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink({ url });
+    });
+
+    return () => subscription.remove();
+  }, [navigation]);
+
+  const handleNext = async () => {
     if (step === 1) {
-      if (name.trim() === '') {
+      if (username.trim() === '') {
         Alert.alert('Lỗi', 'Vui lòng nhập tên của bạn');
         return;
       }
       setStep(2);
     } else if (step === 2) {
-      if (phoneNumber.trim() === '' || !validatePhoneNumber(phoneNumber)) {
-        Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại hợp lệ (10-11 số)');
+      if (!validateEmail(email)) {
+        Alert.alert('Lỗi', 'Vui lòng nhập email hợp lệ');
         return;
       }
-      setStep(3);
-    } else if (step === 3) {
-      console.log('Thông tin đăng ký:', { 
-        name, 
-        phoneNumber, 
-        gender, 
-        birthDate: `${day}/${month}/${year}` 
-      });
-      // Xử lý đăng ký ở đây
+      if (!validatePassword(password)) {
+        Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const requestBody = { username, email, password };
+        console.log('Sending registration request:', requestBody);
+
+        const response = await fetch(`${API_URL}/api/auth/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        const data = await response.json();
+        console.log('API response:', data, 'Status:', response.status);
+        setLoading(false);
+
+        if (response.status === 201) {
+          setStep(3); // Chuyển sang bước xác nhận email
+        } else {
+          Alert.alert('Lỗi', data.message || `Đăng ký thất bại. Mã lỗi: ${response.status}`);
+        }
+      } catch (error) {
+        setLoading(false);
+        console.error('Registration error:', error);
+        Alert.alert('Lỗi', 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng và URL API.');
+      }
     }
   };
 
   const handleBack = () => {
     if (step === 1) {
       navigation.goBack();
+    } else if (step === 3) {
+      navigation.navigate('Login');
     } else {
       setStep(step - 1);
     }
   };
 
-  const days = Array.from({ length: 31 }, (_, i) => (i + 1).toString());
-  const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
-  const years = Array.from({ length: 100 }, (_, i) => (2025 - i).toString());
+  const handleGoToLogin = () => {
+    console.log("Chuyển qua Login");
+    navigation.navigate('Login');
+  };
 
   return (
     <View style={styles.container}>
-      {/* Nút Trở về */}
       <TouchableOpacity style={styles.backButton} onPress={handleBack}>
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
 
-      {/* Step 1: Tên */}
       {step === 1 && (
         <>
           <Text style={styles.title}>Tên Zalo</Text>
@@ -66,8 +116,8 @@ export default function RegisterScreen({ navigation }) {
             style={styles.input}
             placeholder="Nhập tên của bạn"
             placeholderTextColor="#999"
-            value={name}
-            onChangeText={setName}
+            value={username}
+            onChangeText={setUsername}
             autoFocus
           />
           <Text style={styles.note}>
@@ -78,104 +128,70 @@ export default function RegisterScreen({ navigation }) {
         </>
       )}
 
-      {/* Step 2: Số điện thoại */}
       {step === 2 && (
         <>
-          <Text style={styles.title}>Số điện thoại</Text>
+          <Text style={styles.title}>Thông tin đăng nhập</Text>
           <TextInput
             style={styles.input}
-            placeholder="Nhập số điện thoại"
+            placeholder="Nhập email"
             placeholderTextColor="#999"
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
-            keyboardType="phone-pad"
-            maxLength={11}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
             autoFocus
           />
-          <Text style={styles.note}>
-            Số điện thoại sẽ được dùng để xác minh tài khoản
-          </Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Nhập mật khẩu"
+            placeholderTextColor="#999"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          <Text style={styles.note}>Email và mật khẩu sẽ được dùng để đăng nhập.</Text>
         </>
       )}
 
-      {/* Step 3: Thông tin cá nhân */}
       {step === 3 && (
         <>
-          <Text style={styles.title}>Ngày sinh và giới tính</Text>
-          <Text style={styles.subtitle}>Giới tính</Text>
-          <View style={styles.genderContainer}>
-            <TouchableOpacity
-              style={[styles.genderButton, gender === 'Nam' && styles.selectedGender]}
-              onPress={() => setGender('Nam')}
-            >
-              <Text style={[styles.genderText, gender === 'Nam' && styles.selectedGenderText]}>Nam</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.genderButton, gender === 'Nữ' && styles.selectedGender]}
-              onPress={() => setGender('Nữ')}
-            >
-              <Text style={[styles.genderText, gender === 'Nữ' && styles.selectedGenderText]}>Nữ</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.subtitle}>Ngày sinh</Text>
-          <View style={styles.dateContainer}>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={day}
-                onValueChange={setDay}
-                dropdownIconColor="#00aeef"
-              >
-                {days.map((d) => (
-                  <Picker.Item key={d} label={d} value={d} />
-                ))}
-              </Picker>
-            </View>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={month}
-                onValueChange={setMonth}
-                dropdownIconColor="#00aeef"
-              >
-                {months.map((m) => (
-                  <Picker.Item key={m} label={m} value={m} />
-                ))}
-              </Picker>
-            </View>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={year}
-                onValueChange={setYear}
-                dropdownIconColor="#00aeef"
-              >
-                {years.map((y) => (
-                  <Picker.Item key={y} label={y} value={y} />
-                ))}
-              </Picker>
-            </View>
-          </View>
+          <Text style={styles.title}>Vui lòng xác nhận email</Text>
+          <Text style={styles.note}>
+            Chúng tôi đã gửi một email xác minh đến {email}. Vui lòng kiểm tra hộp thư (bao gồm thư mục spam) và nhấp vào liên kết để kích hoạt tài khoản.
+          </Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={handleGoToLogin}
+          >
+            <Text style={styles.loginButtonText}>Quay lại đăng nhập</Text>
+          </TouchableOpacity>
         </>
       )}
 
-      {/* Nút Tiếp tục */}
-      <TouchableOpacity
-        style={[
-          styles.nextButton,
-          (step === 1 && !name.trim()) ||
-          (step === 2 && !validatePhoneNumber(phoneNumber)) ||
-          (step === 3 && !gender)
-            ? styles.disabledButton
-            : null,
-        ]}
-        onPress={handleNext}
-        disabled={
-          (step === 1 && !name.trim()) ||
-          (step === 2 && !validatePhoneNumber(phoneNumber)) ||
-          (step === 3 && !gender)
-        }
-      >
-        <Text style={styles.nextButtonText}>{step === 3 ? '✓' : '→'}</Text>
-      </TouchableOpacity>
+      {step !== 3 && (
+        <TouchableOpacity
+          style={[
+            styles.nextButton,
+            (step === 1 && !username.trim()) ||
+            (step === 2 && (!validateEmail(email) || !validatePassword(password))) ||
+            loading
+              ? styles.disabledButton
+              : null,
+          ]}
+          onPress={handleNext}
+          disabled={
+            (step === 1 && !username.trim()) ||
+            (step === 2 && (!validateEmail(email) || !validatePassword(password))) ||
+            loading
+          }
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.nextButtonText}>{step === 2 ? '✓' : '→'}</Text>
+          )}
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -193,12 +209,6 @@ const styles = StyleSheet.create({
     color: '#0068FF',
     marginBottom: 30,
     textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#444',
-    marginBottom: 15,
   },
   input: {
     borderWidth: 1,
@@ -219,60 +229,7 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
     marginBottom: 30,
-  },
-  genderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 30,
-  },
-  genderButton: {
-    flex: 1,
-    paddingVertical: 15,
-    borderWidth: 1,
-    borderColor: '#d1d1d1',
-    borderRadius: 10,
-    alignItems: 'center',
-    marginHorizontal: 10,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  selectedGender: {
-    backgroundColor: '#00aeef',
-    borderColor: '#00aeef',
-  },
-  genderText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  selectedGenderText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  dateContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  pickerContainer: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#d1d1d1',
-    borderRadius: 10,
-    marginHorizontal: 5,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  picker: {
-    height: 50,
-    width: '100%',
-    color: '#333',
+    textAlign: 'center',
   },
   backButton: {
     position: 'absolute',
@@ -317,6 +274,23 @@ const styles = StyleSheet.create({
   nextButtonText: {
     color: '#fff',
     fontSize: 30,
+    fontWeight: 'bold',
+  },
+  loginButton: {
+    backgroundColor: '#00aeef',
+    borderRadius: 10,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

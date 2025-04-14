@@ -1,31 +1,28 @@
-// components/Footer.js
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 const Footer = ({ navigation }) => {
+  const tabs = [
+    { name: 'ChatList', icon: 'chatbubbles', label: 'Tin nhắn', route: 'ChatList' },
+    { name: 'Contacts', icon: 'people', label: 'Danh bạ', route: 'Contacts' },
+    { name: 'Explore', icon: 'search', label: 'Khám phá', route: 'Explore' },
+    { name: 'Diary', icon: 'book', label: 'Nhật ký', route: 'Diary' },
+    { name: 'User', icon: 'person', label: 'Cá nhân', route: 'User' },
+  ];
+
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.icon}>
-        <Ionicons name="chatbubbles" size={24} color="black" />
-        <Text>Tin nhắn</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.icon}>
-        <Ionicons name="people" size={24} color="black" />
-        <Text>Danh bạ</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.icon}>
-        <Ionicons name="search" size={24} color="black" />
-        <Text>Khám phá</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.icon}>
-        <Ionicons name="book" size={24} color="black" />
-        <Text>Nhật ký</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.icon} onPress={() => navigation.navigate('User')}>
-        <Ionicons name="person" size={24} color="black" />
-        <Text>Cá nhân</Text>
-      </TouchableOpacity>
+      {tabs.map((tab) => (
+        <TouchableOpacity
+          key={tab.name}
+          style={styles.icon}
+          onPress={() => navigation.navigate(tab.route)}
+        >
+          <Ionicons name={tab.icon} size={24} color="#999" />
+          <Text style={styles.iconText}>{tab.label}</Text>
+        </TouchableOpacity>
+      ))}
     </View>
   );
 };
@@ -34,13 +31,23 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    padding: 10,
-    backgroundColor: '#fff',
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    borderTopColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   icon: {
     alignItems: 'center',
+  },
+  iconText: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 5,
   },
 });
 

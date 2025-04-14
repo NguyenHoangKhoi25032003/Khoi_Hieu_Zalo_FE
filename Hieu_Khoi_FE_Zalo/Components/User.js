@@ -1,61 +1,105 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import Footer from './Footer'; // Import Footer component
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/FontAwesome';
+import Footer from './Footer';
+import { API_URL } from '../config';
+const User = ({ navigation }) => {
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-// Import ảnh từ thư mục img
-import profileImage from '../img/unnamed.png';  // Đảm bảo đường dẫn chính xác
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) {
+          if (Platform.OS === 'web') {
+            window.location.href = '/login'; // Chuyển hướng trên web
+          } else {
+            navigation.navigate('Login');
+          }
+          return;
+        }
 
-const User = () => {
+        const response = await fetch(`${API_URL}/api/user/profile`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+        if (response.status === 200) {
+          setProfile(data);
+        } else {
+          throw new Error(data.message || 'Không thể tải hồ sơ');
+        }
+      } catch (error) {
+        setError(error.message);
+        console.error('Fetch profile error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#0068FF" />
+      </View>
+    );
+  }
+
+  if (error || !profile) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>{error || 'Không thể tải hồ sơ'}</Text>
+        <Footer navigation={navigation} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* User Profile */}
-      <View style={styles.profileContainer}>
-        {/* Hiển thị ảnh đã import từ thư mục */}
+      {/* Cover Photo Section */}
+      <View style={styles.coverContainer}>
         <Image
-          source={profileImage}  // Sử dụng ảnh đã import
-          style={styles.profileImage}
+          source={require('../img/unnamed.png')} // Đổi thành ảnh bìa riêng biệt
+          style={styles.coverImage}
+          onError={() => console.log('Error loading cover image')}
         />
-        <Text style={styles.profileName}>Công Hiếu</Text>
-        <TouchableOpacity style={styles.profileButton}>
-          <Text style={styles.buttonText}>Xem trang cá nhân</Text>
+      </View>
+
+      {/* Profile Section */}
+      <View style={styles.profileWrapper}>
+        <View style={styles.avatarContainer}>
+          <TouchableOpacity onPress={() => navigation.navigate('EditProfile', { profile })}>
+            <Image
+              source={{ uri: profile.avatarUrl }}
+              style={styles.avatar}
+              defaultSource={require('../img/unnamed.png')}
+            />
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.profileName}>{profile.username}</Text>
+        <TouchableOpacity
+          style={styles.editButton}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('ChangePassword')} // Điều hướng đến ChangePassword
+        >
+          <Icon name="pencil" size={16} color="#fff" style={styles.buttonIcon} />
+          <Text style={styles.buttonText}>Đổi Mật Khẩu</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Settings Options */}
-      <ScrollView style={styles.settingsContainer}>
-        <TouchableOpacity style={styles.settingItem}>
-          <Ionicons name="cloud" size={24} color="blue" />
-          <Text style={styles.settingText}>zCloud</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
-          <Ionicons name="color-palette" size={24} color="blue" />
-          <Text style={styles.settingText}>zStyle – Nổi bật trên Zalo</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
-          <Ionicons name="cloud-outline" size={24} color="blue" />
-          <Text style={styles.settingText}>Cloud của tôi</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
-          <Ionicons name="cloud-upload" size={24} color="blue" />
-          <Text style={styles.settingText}>Dữ liệu trên máy</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
-          <Ionicons name="qr-code" size={24} color="blue" />
-          <Text style={styles.settingText}>Ví QR</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
-          <Ionicons name="shield" size={24} color="blue" />
-          <Text style={styles.settingText}>Tài khoản và bảo mật</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
-          <Ionicons name="lock-closed" size={24} color="blue" />
-          <Text style={styles.settingText}>Quyền riêng tư</Text>
-        </TouchableOpacity>
-
-      {/* Footer */}
-      <Footer navigation={navigation} />
-      </ScrollView>
+      {/* Footer Section */}
+      <View style={styles.footerContainer}>
+        <Footer navigation={navigation} />
+      </View>
     </View>
   );
 };
@@ -63,46 +107,70 @@ const User = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f4f4f4',
-    padding: 10,
+    backgroundColor: '#fff',
   },
-  profileContainer: {
+  coverContainer: {
+    height: 200,
+    width: '100%',
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  profileWrapper: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginTop: -60,
+    paddingHorizontal: 20,
   },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  avatarContainer: {
     marginBottom: 10,
   },
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
   profileName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 10,
   },
-  profileButton: {
-    marginTop: 10,
-    backgroundColor: '#ddd',
-    padding: 10,
-    borderRadius: 5,
-  },
-  buttonText: {
-    color: '#007bff',
-  },
-  settingsContainer: {
-    marginTop: 20,
-  },
-  settingItem: {
+  editButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    backgroundColor: '#007bff',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
   },
-  settingText: {
-    marginLeft: 10,
+  buttonIcon: {
+    marginRight: 8,
+    color: '#fff',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  footerContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+  },
+  errorText: {
     fontSize: 16,
+    color: '#d32f2f',
+    textAlign: 'center',
+    marginTop: 20,
+    flex: 1,
   },
 });
 
