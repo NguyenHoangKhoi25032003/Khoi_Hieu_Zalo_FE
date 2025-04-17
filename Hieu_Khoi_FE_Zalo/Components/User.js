@@ -68,7 +68,7 @@ const User = ({ navigation }) => {
       {/* Cover Photo Section */}
       <View style={styles.coverContainer}>
         <Image
-          source={require('../img/unnamed.png')} // Đổi thành ảnh bìa riêng biệt
+          source={require('../img/lager1.jpg')} // Đổi thành ảnh bìa riêng biệt
           style={styles.coverImage}
           onError={() => console.log('Error loading cover image')}
         />
@@ -81,7 +81,7 @@ const User = ({ navigation }) => {
             <Image
               source={{ uri: profile.avatarUrl }}
               style={styles.avatar}
-              defaultSource={require('../img/unnamed.png')}
+              defaultSource={require('../img/lager.jpg')}
             />
           </TouchableOpacity>
         </View>
@@ -93,6 +93,13 @@ const User = ({ navigation }) => {
         >
           <Icon name="pencil" size={16} color="#fff" style={styles.buttonIcon} />
           <Text style={styles.buttonText}>Đổi Mật Khẩu</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.editButton1}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('Login')}
+        >
+          <Text style={styles.buttonText}>Đăng xuất</Text>
         </TouchableOpacity>
       </View>
 
@@ -110,7 +117,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   coverContainer: {
-    height: 200,
+    height:250,
     width: '100%',
   },
   coverImage: {
@@ -146,6 +153,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 20,
+  },
+  editButton1: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007bff',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    marginTop:10
   },
   buttonIcon: {
     marginRight: 8,

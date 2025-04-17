@@ -388,7 +388,7 @@ const ChatList = ({ navigation }) => {
             onPress={() => {
               console.log('Navigating to ChatScreen with:', {
                 receiverId: item.userId,
-                receiverName: item.username,
+                 receiverName: item.username,
                 currentUserId,
               });
               if (!currentUserId) {
@@ -413,9 +413,10 @@ const ChatList = ({ navigation }) => {
             />
             <View style={styles.chatInfo}>
               <Text style={styles.chatName}>{item.username}</Text>
-              <Text style={styles.chatMessage}>{item.email}</Text>
+              <Text style={styles.chatMessage}>{item.email}    </Text>
+              {/* {item.email} */}
             </View>
-            <Text style={styles.chatTime}>T5</Text>
+            {/* <Text style={styles.chatTime}>T5</Text> */}
           </TouchableOpacity>
         )}
       />
