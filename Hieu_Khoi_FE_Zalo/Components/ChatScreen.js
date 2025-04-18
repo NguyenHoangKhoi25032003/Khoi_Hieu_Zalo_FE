@@ -1,8 +1,4 @@
-
-// // export default ChatScreen;
-
-
-// import React, { useState, useEffect } from 'react';
+// import React, { useState, useEffect, useRef } from 'react';
 // import {
 //   View,
 //   Text,
@@ -26,6 +22,7 @@
 // import { API_URL } from '../config';
 // import Icon from 'react-native-vector-icons/MaterialIcons';
 // import Ionicons from 'react-native-vector-icons/Ionicons';
+// import io from 'socket.io-client';
 
 // const ChatScreen = ({ route, navigation }) => {
 //   const { receiverId, receiverName, currentUserId } = route.params || {};
@@ -38,6 +35,8 @@
 //   const [forwardModalVisible, setForwardModalVisible] = useState(false);
 //   const [users, setUsers] = useState([]);
 //   const [selectedMessage, setSelectedMessage] = useState(null);
+//   const [socket, setSocket] = useState(null);
+//   const flatListRef = useRef(null);
 
 //   console.log('ChatScreen params:', { receiverId, receiverName, currentUserId });
 
@@ -63,11 +62,146 @@
 
 //   const sortedIds = [cleanCurrentUserId, cleanReceiverId].sort();
 //   const conversationId = `${sortedIds[0]}#${sortedIds[1]}`;
+//   console.log('Generated conversationId:', conversationId);
+
+//   const refreshToken = async () => {
+//     try {
+//       const email = 'khoih232@gmail.com'; // Thay bằng cách lấy email động
+//       const password = await AsyncStorage.getItem('password'); // Giả sử mật khẩu lưu trong AsyncStorage
+//       if (!password) {
+//         console.log('No password found, navigating to Login');
+//         navigation.navigate('Login');
+//         return null;
+//       }
+
+//       console.log('Refreshing token for:', email);
+//       const response = await fetch(`${API_URL}/api/auth/login`, {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify({ email, password }),
+//       });
+
+//       const data = await response.json();
+//       console.log('Refresh token response:', data);
+//       if (response.status === 200 && data.token) {
+//         await AsyncStorage.setItem('token', data.token);
+//         return data.token;
+//       } else {
+//         console.error('Failed to refresh token:', data);
+//         navigation.navigate('Login');
+//         return null;
+//       }
+//     } catch (err) {
+//       console.error('Refresh token error:', err);
+//       setError('Không thể làm mới token: ' + err.message);
+//       return null;
+//     }
+//   };
 
 //   useEffect(() => {
+//     const initSocket = async () => {
+//       let token = await AsyncStorage.getItem('token');
+//       console.log('Socket token:', token ? token.slice(0, 10) + '...' : 'missing');
+//       if (!token) {
+//         console.log('No token found, navigating to Login');
+//         navigation.navigate('Login');
+//         return;
+//       }
+
+//       if (!socket) {
+//         const connectSocket = async () => {
+//           // Loại bỏ Bearer nếu có
+//           const rawToken = token.startsWith('Bearer ') ? token.slice(7) : token;
+//           const socketInstance = io(API_URL, {
+//             query: { token: rawToken },
+//             auth: { token: rawToken },
+//             forceNew: false,
+//             reconnection: true,
+//             reconnectionAttempts: 5,
+//             reconnectionDelay: 1000,
+//           });
+
+//           socketInstance.on('connect', () => {
+//             console.log('Socket connected:', socketInstance.id);
+//             socketInstance.emit('register', cleanCurrentUserId);
+//             console.log('Emitted register event with userId:', cleanCurrentUserId);
+//           });
+
+//           socketInstance.on('receiveMessage', (message) => {
+//             console.log('Received message:', {
+//               conversationId: message.conversationId,
+//               content: message.content,
+//               contentType: message.contentType,
+//               timestamp: message.timestamp,
+//               senderId: message.senderId,
+//               receiverId: message.receiverId,
+//               fileUrl: message.fileUrl,
+//             });
+//             console.log('Comparing conversationId:', message.conversationId, 'with', conversationId);
+//             if (message.conversationId === conversationId) {
+//               setMessages((prev) => {
+//                 const messageKey = `${message.conversationId}-${message.timestamp}-${message.senderId}`;
+//                 const isDuplicate = prev.some(
+//                   (msg) => `${msg.conversationId}-${msg.timestamp}-${msg.senderId}` === messageKey
+//                 );
+//                 if (isDuplicate) {
+//                   console.log('Duplicate message detected, skipping:', message);
+//                   return prev;
+//                 }
+//                 console.log('Adding new message:', message);
+//                 const newMessages = [...prev, message].filter((item) => item);
+//                 console.log('Updated messages state:', newMessages);
+//                 return newMessages;
+//               });
+//               setTimeout(() => {
+//                 flatListRef.current?.scrollToEnd({ animated: true });
+//               }, 100);
+//             } else {
+//               console.log('ConversationId mismatch:', message.conversationId, conversationId);
+//             }
+//           });
+
+//           socketInstance.on('messageRead', (data) => {
+//             console.log('Message read:', data);
+//             if (data.conversationId === conversationId && data.updatedMessages) {
+//               setMessages((prev) =>
+//                 prev.map((msg) => {
+//                   const updatedMsg = data.updatedMessages.find(
+//                     (updated) => updated.conversationId === msg.conversationId && updated.timestamp === msg.timestamp
+//                   );
+//                   return updatedMsg ? { ...msg, isRead: updatedMsg.isRead, readtime: updatedMsg.readtime } : msg;
+//                 })
+//               );
+//             }
+//           });
+//           socketInstance.on('connect_error', async (err) => {
+//             console.error('Socket connect_error:', err.message);
+//             setError('Socket error: ' + err.message);
+//             if (err.message.includes('Invalid token')) {
+//               console.log('Attempting to refresh token due to invalid token');
+//               const newToken = await refreshToken();
+//               if (newToken) {
+//                 socketInstance.disconnect();
+//                 token = newToken;
+//                 connectSocket(); // Thử kết nối lại với token mới
+//               }
+//             }
+//           });
+
+//           socketInstance.on('reconnect_attempt', (attempt) => {
+//             console.log('Socket reconnect attempt:', attempt);
+//           });
+
+//           return socketInstance;
+//         };
+
+//         const socketInstance = await connectSocket();
+//         setSocket(socketInstance);
+//       }
+//     };
+
 //     const fetchMessages = async () => {
 //       try {
-//         console.log('Fetching token from AsyncStorage');
 //         const token = await AsyncStorage.getItem('token');
 //         if (!token) {
 //           console.log('No token found, navigating to Login');
@@ -85,8 +219,19 @@
 //         const data = await response.json();
 //         console.log('Messages fetched:', data);
 //         if (response.status === 200) {
-//           setMessages(Array.isArray(data) ? data.filter(item => item) : []);
+//           setMessages((prev) => {
+//             const existingKeys = new Set(prev.map((msg) => `${msg.conversationId}-${msg.timestamp}-${msg.senderId}`));
+//             const newMessages = Array.isArray(data)
+//               ? data.filter((item) => item && !existingKeys.has(`${item.conversationId}-${item.timestamp}-${item.senderId}`))
+//               : [];
+//             const updatedMessages = [...prev, ...newMessages].filter((item) => item);
+//             console.log('Updated messages state after fetch:', updatedMessages);
+//             return updatedMessages;
+//           });
 //           setError('');
+//           setTimeout(() => {
+//             flatListRef.current?.scrollToEnd({ animated: false });
+//           }, 100);
 //         } else {
 //           setError(data.message || 'Lỗi khi tải tin nhắn');
 //         }
@@ -98,10 +243,64 @@
 //       }
 //     };
 
+//     const markMessagesAsRead = async () => {
+//       try {
+//         const token = await AsyncStorage.getItem('token');
+//         if (!token) {
+//           console.log('No token found, navigating to Login');
+//           navigation.navigate('Login');
+//           return;
+//         }
+
+//         console.log('Marking messages as read for conversationId:', conversationId);
+//         const response = await fetch(`${API_URL}/api/messages/mark-read`, {
+//           method: 'POST',
+//           headers: {
+//             'Content-Type': 'application/json',
+//             Authorization: `Bearer ${token}`,
+//           },
+//           body: JSON.stringify({ conversationId }),
+//         });
+
+//         const data = await response.json();
+//         if (response.status === 200) {
+//           console.log('Messages marked as read:', data);
+//           setMessages((prev) =>
+//             prev.map((msg) =>
+//               msg.conversationId === conversationId && !msg.isRead && msg.receiverId === cleanCurrentUserId
+//                 ? { ...msg, isRead: true }
+//                 : msg
+//             )
+//           );
+//           socket?.emit('messageRead', { conversationId, userId: cleanCurrentUserId });
+//         } else {
+//           console.error('Mark messages as read failed:', data);
+//           setError(data.message || 'Không thể đánh dấu tin nhắn đã xem');
+//         }
+//       } catch (err) {
+//         console.error('Mark messages as read error:', err);
+//         setError('Không thể đánh dấu tin nhắn đã xem: ' + err.message);
+//       }
+//     };
+
 //     fetchMessages();
-//     const interval = setInterval(fetchMessages, 5000);
-//     return () => clearInterval(interval);
-//   }, [conversationId, navigation]);
+//     initSocket();
+//     markMessagesAsRead();
+
+//     // Tải lại tin nhắn định kỳ nếu Socket.IO không kết nối
+//     const interval = setInterval(() => {
+//       if (!socket?.connected) {
+//         console.log('Socket not connected, fetching messages');
+//         fetchMessages();
+//       }
+//     }, 5000);
+
+//     return () => {
+//       clearInterval(interval);
+//       socket?.disconnect();
+//       console.log('Socket disconnected');
+//     };
+//   }, [conversationId, cleanCurrentUserId, navigation]);
 
 //   const fetchUsers = async () => {
 //     try {
@@ -126,8 +325,7 @@
 //       const data = await response.json();
 //       console.log('Fetched users:', data);
 
-//       // Lọc bỏ người dùng hiện tại (nếu backend chưa lọc)
-//       const filteredUsers = data.filter(user => user.userId !== currentUserId);
+//       const filteredUsers = data.filter((user) => user.userId !== cleanCurrentUserId);
 //       setUsers(filteredUsers);
 
 //       if (filteredUsers.length === 0) {
@@ -153,9 +351,9 @@
 //         return;
 //       }
 
-//       console.log('Sending message:', { receiverId, content: newMessage, contentType });
+//       console.log('Sending message:', { receiverId: cleanReceiverId, content: newMessage, contentType });
 //       const body = {
-//         receiverId,
+//         receiverId: cleanReceiverId,
 //         content: newMessage.trim(),
 //         contentType,
 //       };
@@ -171,8 +369,7 @@
 
 //       const data = await response.json();
 //       console.log('Send message response:', data);
-//       if (response.status === 201) {
-//         setMessages([...messages, data.data].filter(item => item));
+//       if (response.status === 201 && data.data) {
 //         setNewMessage('');
 //         setError('');
 //       } else {
@@ -222,7 +419,7 @@
 //         name: fileName,
 //         type: fileType,
 //       });
-//       formData.append('receiverId', receiverId);
+//       formData.append('receiverId', cleanReceiverId);
 //       formData.append('contentType', contentType);
 
 //       console.log('Sending file to server');
@@ -237,8 +434,10 @@
 //       const data = await uploadResponse.json();
 //       console.log('File upload response:', data);
 //       if (uploadResponse.status === 201) {
-//         setMessages([...messages, data.data].filter(item => item));
 //         setError('');
+//         setTimeout(() => {
+//           flatListRef.current?.scrollToEnd({ animated: true });
+//         }, 100);
 //       } else {
 //         console.log('Upload failed with status:', uploadResponse.status);
 //         setError(data.message || 'Không thể gửi file');
@@ -296,7 +495,7 @@
 //         name: fileName,
 //         type: fileType,
 //       });
-//       formData.append('receiverId', receiverId);
+//       formData.append('receiverId', cleanReceiverId);
 //       formData.append('contentType', contentType);
 
 //       console.log('Sending image to server');
@@ -311,8 +510,10 @@
 //       const data = await uploadResponse.json();
 //       console.log('Image upload response:', data);
 //       if (uploadResponse.status === 201) {
-//         setMessages([...messages, data.data].filter(item => item));
 //         setError('');
+//         setTimeout(() => {
+//           flatListRef.current?.scrollToEnd({ animated: true });
+//         }, 100);
 //       } else {
 //         console.log('Upload failed with status:', uploadResponse.status);
 //         setError(data.message || 'Không thể gửi ảnh');
@@ -349,7 +550,9 @@
 //       const data = await response.json();
 //       console.log('Delete message response:', data);
 //       if (response.status === 200) {
-//         setMessages(messages.filter((msg) => !(msg.conversationId === conversationId && msg.timestamp === timestamp)));
+//         setMessages((prev) =>
+//           prev.filter((msg) => !(msg.conversationId === conversationId && msg.timestamp === timestamp))
+//         );
 //         setError('');
 //       } else {
 //         setError(data.message || 'Không thể xóa tin nhắn');
@@ -381,11 +584,13 @@
 //       const data = await response.json();
 //       console.log('Recall message response:', data);
 //       if (response.status === 200) {
-//         setMessages(messages.map((msg) =>
-//           msg.conversationId === conversationId && msg.timestamp === timestamp
-//             ? { ...msg, isRecalled: true, content: 'Tin nhắn đã được thu hồi', fileUrl: null, contentType: 'text' }
-//             : msg
-//         ));
+//         setMessages((prev) =>
+//           prev.map((msg) =>
+//             msg.conversationId === conversationId && msg.timestamp === timestamp
+//               ? { ...msg, isRecalled: true, content: 'Tin nhắn đã được thu hồi', fileUrl: null, contentType: 'text' }
+//               : msg
+//           )
+//         );
 //         setError('');
 //       } else {
 //         setError(data.message || 'Không thể thu hồi tin nhắn');
@@ -404,7 +609,11 @@
 //         return;
 //       }
 
-//       console.log('Forwarding message:', { conversationId: selectedMessage.conversationId, timestamp: selectedMessage.timestamp, newReceiverId });
+//       console.log('Forwarding message:', {
+//         conversationId: selectedMessage.conversationId,
+//         timestamp: selectedMessage.timestamp,
+//         newReceiverId,
+//       });
 //       const response = await fetch(`${API_URL}/api/messages/forward`, {
 //         method: 'POST',
 //         headers: {
@@ -434,7 +643,6 @@
 //   };
 
 //   const showMessageOptions = (conversationId, timestamp, senderId, isRecalled) => {
-//     const message = messages.find((msg) => msg.conversationId === conversationId && msg.timestamp === timestamp);
 //     const options = [
 //       { text: 'Hủy', style: 'cancel' },
 //       {
@@ -450,7 +658,7 @@
 //       },
 //     ];
 
-//     if (senderId === currentUserId && !isRecalled) {
+//     if (senderId === cleanCurrentUserId && !isRecalled) {
 //       options.push({
 //         text: 'Thu hồi',
 //         style: 'default',
@@ -464,12 +672,7 @@
 //       onPress: () => handleDeleteMessage(conversationId, timestamp),
 //     });
 
-//     Alert.alert(
-//       'Tùy chọn',
-//       'Chọn hành động',
-//       options,
-//       { cancelable: true }
-//     );
+//     Alert.alert('Tùy chọn', 'Chọn hành động', options, { cancelable: true });
 //   };
 
 //   if (loading) {
@@ -492,7 +695,6 @@
 //         </TouchableOpacity>
 //         <View style={styles.headerContent}>
 //           <Text style={styles.headerTitle}>{receiverName || 'Unknown'}</Text>
-//           <Text style={styles.lastSeen}>Truy cập 14 phút trước</Text>
 //         </View>
 //         <View style={styles.headerIcons}>
 //           <TouchableOpacity>
@@ -510,17 +712,30 @@
 //       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
 //       <FlatList
+//         ref={flatListRef}
 //         data={messages}
-//         keyExtractor={(item, index) => item?.timestamp?.toString() || index.toString()}
+//         keyExtractor={(item, index) => `${item?.conversationId || 'unknown'}-${item?.timestamp?.toString() || 'no-timestamp'}-${item?.senderId || 'no-sender'}-${index}`}
+//         extraData={messages}
 //         renderItem={({ item }) => {
 //           if (!item) return null;
-//           console.log('Rendering message:', item);
+//           console.log('Rendering message:', {
+//             conversationId: item.conversationId,
+//             content: item.content,
+//             contentType: item.contentType,
+//             timestamp: item.timestamp,
+//             senderId: item.senderId,
+//             receiverId: item.receiverId,
+//             fileUrl: item.fileUrl,
+//             isRecalled: item.isRecalled,
+//             isRead: item.isRead,
+//             readtime: item.readtime,
+//           });
 //           return (
 //             <TouchableOpacity
 //               onLongPress={() => showMessageOptions(item.conversationId, item.timestamp, item.senderId, item.isRecalled)}
 //               style={[
 //                 item.contentType === 'text' ? styles.messageContainer : styles.mediaContainer,
-//                 item.senderId === currentUserId ? styles.sentMessage : styles.receivedMessage,
+//                 item.senderId === cleanCurrentUserId ? styles.sentMessage : styles.receivedMessage,
 //               ]}
 //             >
 //               {item.isRecalled ? (
@@ -548,27 +763,29 @@
 //               ) : (
 //                 <Text style={styles.messageText}>{item.content || ''}</Text>
 //               )}
-//               <Text style={styles.messageTime}>
-//                 {item.timestamp
-//                   ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-//                   : ''}
-//               </Text>
+//               <View style={styles.messageFooter}>
+//                 {/* <Text style={styles.messageTime}>
+//                   {item.timestamp
+//                     ? new Date(item.timestamp.split('-')[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+//                     : ''}
+//                 </Text> */}
+//                 {item.senderId === cleanCurrentUserId && !item.isRecalled && (
+//                   <Text style={styles.readStatus}>
+//                     {item.isRead && item.readtime
+//                       ? `Đã xem lúc ${new Date(item.readtime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+//                       : 'Đã gửi'}
+//                   </Text>
+//                 )}
+//               </View>
 //             </TouchableOpacity>
 //           );
 //         }}
 //         contentContainerStyle={[styles.messageList, { paddingBottom: 80 }]}
 //       />
 
-//       <Modal
-//         visible={modalVisible}
-//         transparent={true}
-//         onRequestClose={() => setModalVisible(false)}
-//       >
+//       <Modal visible={modalVisible} transparent={true} onRequestClose={() => setModalVisible(false)}>
 //         <View style={styles.modalContainer}>
-//           <TouchableOpacity
-//             style={styles.closeButton}
-//             onPress={() => setModalVisible(false)}
-//           >
+//           <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
 //             <Icon name="close" size={30} color="#FFF" />
 //           </TouchableOpacity>
 //           <ScrollView
@@ -579,20 +796,12 @@
 //             showsHorizontalScrollIndicator={false}
 //             showsVerticalScrollIndicator={false}
 //           >
-//             <Image
-//               source={{ uri: selectedImage }}
-//               style={styles.modalImage}
-//               resizeMode="contain"
-//             />
+//             <Image source={{ uri: selectedImage }} style={styles.modalImage} resizeMode="contain" />
 //           </ScrollView>
 //         </View>
 //       </Modal>
 
-//       <Modal
-//         visible={forwardModalVisible}
-//         transparent={true}
-//         onRequestClose={() => setForwardModalVisible(false)}
-//       >
+//       <Modal visible={forwardModalVisible} transparent={true} onRequestClose={() => setForwardModalVisible(false)}>
 //         <View style={styles.modalContainer}>
 //           <View style={styles.forwardModalContent}>
 //             <Text style={styles.modalTitle}>Chuyển tiếp tin nhắn</Text>
@@ -601,21 +810,15 @@
 //             ) : (
 //               <FlatList
 //                 data={users}
-//                 keyExtractor={(item) => item.userId}
+//                 keyExtractor={(item, index) => `${item.userId}-${index}`}
 //                 renderItem={({ item }) => (
-//                   <TouchableOpacity
-//                     style={styles.userItem}
-//                     onPress={() => handleForwardMessage(item.userId)}
-//                   >
+//                   <TouchableOpacity style={styles.userItem} onPress={() => handleForwardMessage(item.userId)}>
 //                     <Text style={styles.userName}>{item.username || 'Unknown'}</Text>
 //                   </TouchableOpacity>
 //                 )}
 //               />
 //             )}
-//             <TouchableOpacity
-//               style={styles.closeModalButton}
-//               onPress={() => setForwardModalVisible(false)}
-//             >
+//             <TouchableOpacity style={styles.closeModalButton} onPress={() => setForwardModalVisible(false)}>
 //               <Text style={styles.closeModalText}>Đóng</Text>
 //             </TouchableOpacity>
 //           </View>
@@ -654,7 +857,7 @@
 // const styles = StyleSheet.create({
 //   container: {
 //     flex: 1,
-//     backgroundColor: '#E5E5E5',
+//     backgroundColor: '#F4F4F8',
 //   },
 //   header: {
 //     flexDirection: 'row',
@@ -680,11 +883,6 @@
 //     fontWeight: '600',
 //     color: '#FFFFFF',
 //   },
-//   lastSeen: {
-//     fontSize: 12,
-//     color: '#E0E0E0',
-//     marginTop: 3,
-//   },
 //   headerIcons: {
 //     flexDirection: 'row',
 //     alignItems: 'center',
@@ -702,14 +900,19 @@
 //     flexGrow: 1,
 //   },
 //   messageContainer: {
-//     maxWidth: '70%',
-//     marginVertical: 5,
-//     padding: 10,
-//     borderRadius: 10,
+//     maxWidth: '75%',
+//     marginVertical: 6,
+//     padding: 12,
+//     borderRadius: 18,
+//     shadowColor: '#000',
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 3,
+//     elevation: 2,
 //   },
 //   mediaContainer: {
-//     maxWidth: '70%',
-//     marginVertical: 5,
+//     maxWidth: '80%',
+//     marginVertical: 8,
 //     padding: 0,
 //     backgroundColor: 'transparent',
 //   },
@@ -719,41 +922,55 @@
 //   },
 //   receivedMessage: {
 //     alignSelf: 'flex-start',
-//     backgroundColor: '#fff',
-//     borderWidth: 1,
-//     borderColor: '#ddd',
+//     backgroundColor: 'black',
 //   },
 //   messageText: {
-//     color: '#000',
+//     color: '#FFF',
 //     fontSize: 16,
 //   },
 //   recalledText: {
 //     fontStyle: 'italic',
-//     color: '#666',
+//     color: '#888',
+//   },
+//   messageFooter: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'flex-end',
+//     marginTop: 4,
 //   },
 //   messageTime: {
 //     fontSize: 12,
-//     color: '#666',
-//     marginTop: 5,
-//     textAlign: 'right',
+//     color: '#999',
+//   },
+//   readStatus: {
+//     fontSize: 12,
+//     color: '#999',
+//     marginLeft: 6,
 //   },
 //   imagePreview: {
-//     width: 200,
-//     height: 200,
-//     borderRadius: 10,
-//     marginBottom: 5,
-//     backgroundColor: 'transparent',
+//     width: 250,
+//     height: 250,
+//     borderRadius: 12,
+//     marginBottom: 4,
+//     backgroundColor: '#EEE',
+//     borderWidth: 1,
+//     borderColor: '#DDD',
 //   },
 //   fileContainer: {
 //     flexDirection: 'row',
 //     alignItems: 'center',
-//     padding: 5,
-//     backgroundColor: 'transparent',
+//     padding: 10,
+//     backgroundColor: '#F1F1F1',
+//     borderRadius: 10,
+//     borderWidth: 1,
+//     borderColor: '#DDD',
+//     maxWidth: 250,
 //   },
 //   fileText: {
-//     color: '#000',
-//     fontSize: 16,
+//     color: '#333',
+//     fontSize: 15,
 //     marginLeft: 10,
+//     flex: 1,
 //   },
 //   inputContainer: {
 //     flexDirection: 'row',
@@ -792,15 +1009,18 @@
 //   },
 //   modalContainer: {
 //     flex: 1,
-//     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+//     backgroundColor: 'rgba(0, 0, 0, 0.9)',
 //     justifyContent: 'center',
 //     alignItems: 'center',
 //   },
 //   closeButton: {
 //     position: 'absolute',
-//     top: 40,
+//     top: 50,
 //     right: 20,
 //     zIndex: 1,
+//     backgroundColor: 'rgba(0, 0, 0, 0.6)',
+//     borderRadius: 24,
+//     padding: 12,
 //   },
 //   scrollViewContainer: {
 //     flexGrow: 1,
@@ -809,7 +1029,7 @@
 //   },
 //   modalImage: {
 //     width: width,
-//     height: height * 0.8,
+//     height: height * 0.9,
 //   },
 //   forwardModalContent: {
 //     backgroundColor: '#FFF',
@@ -856,7 +1076,10 @@
 // export default ChatScreen;
 
 
-import React, { useState, useEffect } from 'react';
+
+
+
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -880,6 +1103,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { API_URL } from '../config';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import io from 'socket.io-client';
 
 const ChatScreen = ({ route, navigation }) => {
   const { receiverId, receiverName, currentUserId } = route.params || {};
@@ -892,6 +1116,8 @@ const ChatScreen = ({ route, navigation }) => {
   const [forwardModalVisible, setForwardModalVisible] = useState(false);
   const [users, setUsers] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
+  const [socket, setSocket] = useState(null);
+  const flatListRef = useRef(null);
 
   console.log('ChatScreen params:', { receiverId, receiverName, currentUserId });
 
@@ -917,11 +1143,79 @@ const ChatScreen = ({ route, navigation }) => {
 
   const sortedIds = [cleanCurrentUserId, cleanReceiverId].sort();
   const conversationId = `${sortedIds[0]}#${sortedIds[1]}`;
+  console.log('Generated conversationId:', conversationId);
 
   useEffect(() => {
+    const initSocket = async () => {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        navigation.navigate('Login');
+        return;
+      }
+
+      // Chỉ tạo socket nếu chưa tồn tại
+      if (!socket) {
+        const socketInstance = io(API_URL, {
+          query: { token },
+          forceNew: false, // Ngăn tạo nhiều kết nối
+        });
+
+        socketInstance.on('connect', () => {
+          console.log('Socket connected:', socketInstance.id);
+          socketInstance.emit('register', currentUserId);
+          console.log('Emitted register event with userId:', currentUserId);
+        });
+
+        socketInstance.on('receiveMessage', (message) => {
+          console.log('Received message:', message);
+          console.log('Comparing conversationId:', message.conversationId, 'with', conversationId);
+          if (message.conversationId === conversationId) {
+            setMessages((prev) => {
+              // Tạo khóa duy nhất để kiểm tra trùng lặp
+              const messageKey = `${message.conversationId}-${message.timestamp}-${message.senderId}`;
+              const isDuplicate = prev.some(
+                (msg) => `${msg.conversationId}-${msg.timestamp}-${msg.senderId}` === messageKey
+              );
+              if (isDuplicate) {
+                console.log('Duplicate message detected, skipping:', message);
+                return prev;
+              }
+              console.log('Adding new message:', message);
+              return [...prev, message].filter((item) => item);
+            });
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+          } else {
+            console.log('ConversationId mismatch:', message.conversationId, conversationId);
+          }
+        });
+
+        socketInstance.on('messageRead', (data) => {
+          console.log('Message read:', data);
+          if (data.conversationId === conversationId && data.updatedMessages) {
+            setMessages((prev) =>
+              prev.map((msg) => {
+                const updatedMsg = data.updatedMessages.find(
+                  (updated) => updated.conversationId === msg.conversationId && updated.timestamp === msg.timestamp
+                );
+                return updatedMsg ? { ...msg, isRead: updatedMsg.isRead, readtime: updatedMsg.readtime } : msg;
+              })
+            );
+          }
+        });
+
+        socketInstance.on('connect_error', (err) => {
+          console.error('Socket error:', err);
+          setError('Socket error: ' + err.message);
+        });
+
+        setSocket(socketInstance);
+      }
+    };
+
     const fetchMessages = async () => {
       try {
-        console.log('Fetching token from AsyncStorage');
         const token = await AsyncStorage.getItem('token');
         if (!token) {
           console.log('No token found, navigating to Login');
@@ -939,8 +1233,17 @@ const ChatScreen = ({ route, navigation }) => {
         const data = await response.json();
         console.log('Messages fetched:', data);
         if (response.status === 200) {
-          setMessages(Array.isArray(data) ? data.filter(item => item) : []);
+          setMessages((prev) => {
+            const existingKeys = new Set(prev.map((msg) => `${msg.conversationId}-${msg.timestamp}-${msg.senderId}`));
+            const newMessages = Array.isArray(data)
+              ? data.filter((item) => item && !existingKeys.has(`${item.conversationId}-${item.timestamp}-${item.senderId}`))
+              : [];
+            return [...prev, ...newMessages].filter((item) => item);
+          });
           setError('');
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: false });
+          }, 100);
         } else {
           setError(data.message || 'Lỗi khi tải tin nhắn');
         }
@@ -962,7 +1265,7 @@ const ChatScreen = ({ route, navigation }) => {
         }
 
         console.log('Marking messages as read for conversationId:', conversationId);
-        await fetch(`${API_URL}/api/messages/mark-read`, {
+        const response = await fetch(`${API_URL}/api/messages/mark-read`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -970,7 +1273,22 @@ const ChatScreen = ({ route, navigation }) => {
           },
           body: JSON.stringify({ conversationId }),
         });
-        console.log('Messages marked as read');
+
+        const data = await response.json();
+        if (response.status === 200) {
+          console.log('Messages marked as read:', data);
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.conversationId === conversationId && !msg.isRead && msg.receiverId === currentUserId
+                ? { ...msg, isRead: true }
+                : msg
+            )
+          );
+          socket?.emit('messageRead', { conversationId, userId: currentUserId });
+        } else {
+          console.error('Mark messages as read failed:', data);
+          setError(data.message || 'Không thể đánh dấu tin nhắn đã xem');
+        }
       } catch (err) {
         console.error('Mark messages as read error:', err);
         setError('Không thể đánh dấu tin nhắn đã xem: ' + err.message);
@@ -978,10 +1296,14 @@ const ChatScreen = ({ route, navigation }) => {
     };
 
     fetchMessages();
-    markMessagesAsRead(); // Mark messages as read when the conversation is opened
-    const interval = setInterval(fetchMessages, 5000);
-    return () => clearInterval(interval);
-  }, [conversationId, navigation]);
+    initSocket();
+    markMessagesAsRead();
+
+    return () => {
+      socket?.disconnect();
+      console.log('Socket disconnected');
+    };
+  }, [conversationId, currentUserId, navigation]);
 
   const fetchUsers = async () => {
     try {
@@ -1006,7 +1328,7 @@ const ChatScreen = ({ route, navigation }) => {
       const data = await response.json();
       console.log('Fetched users:', data);
 
-      const filteredUsers = data.filter(user => user.userId !== currentUserId);
+      const filteredUsers = data.filter((user) => user.userId !== currentUserId);
       setUsers(filteredUsers);
 
       if (filteredUsers.length === 0) {
@@ -1050,10 +1372,10 @@ const ChatScreen = ({ route, navigation }) => {
 
       const data = await response.json();
       console.log('Send message response:', data);
-      if (response.status === 201) {
-        setMessages([...messages, data.data].filter(item => item));
+      if (response.status === 201 && data.data) {
         setNewMessage('');
         setError('');
+        // Không thêm tin nhắn vào messages, để Socket.IO xử lý
       } else {
         setError(data.message || 'Không thể gửi tin nhắn');
       }
@@ -1116,8 +1438,10 @@ const ChatScreen = ({ route, navigation }) => {
       const data = await uploadResponse.json();
       console.log('File upload response:', data);
       if (uploadResponse.status === 201) {
-        setMessages([...messages, data.data].filter(item => item));
         setError('');
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
       } else {
         console.log('Upload failed with status:', uploadResponse.status);
         setError(data.message || 'Không thể gửi file');
@@ -1190,8 +1514,10 @@ const ChatScreen = ({ route, navigation }) => {
       const data = await uploadResponse.json();
       console.log('Image upload response:', data);
       if (uploadResponse.status === 201) {
-        setMessages([...messages, data.data].filter(item => item));
         setError('');
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
       } else {
         console.log('Upload failed with status:', uploadResponse.status);
         setError(data.message || 'Không thể gửi ảnh');
@@ -1228,7 +1554,9 @@ const ChatScreen = ({ route, navigation }) => {
       const data = await response.json();
       console.log('Delete message response:', data);
       if (response.status === 200) {
-        setMessages(messages.filter((msg) => !(msg.conversationId === conversationId && msg.timestamp === timestamp)));
+        setMessages((prev) =>
+          prev.filter((msg) => !(msg.conversationId === conversationId && msg.timestamp === timestamp))
+        );
         setError('');
       } else {
         setError(data.message || 'Không thể xóa tin nhắn');
@@ -1260,11 +1588,13 @@ const ChatScreen = ({ route, navigation }) => {
       const data = await response.json();
       console.log('Recall message response:', data);
       if (response.status === 200) {
-        setMessages(messages.map((msg) =>
-          msg.conversationId === conversationId && msg.timestamp === timestamp
-            ? { ...msg, isRecalled: true, content: 'Tin nhắn đã được thu hồi', fileUrl: null, contentType: 'text' }
-            : msg
-        ));
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.conversationId === conversationId && msg.timestamp === timestamp
+              ? { ...msg, isRecalled: true, content: 'Tin nhắn đã được thu hồi', fileUrl: null, contentType: 'text' }
+              : msg
+          )
+        );
         setError('');
       } else {
         setError(data.message || 'Không thể thu hồi tin nhắn');
@@ -1283,7 +1613,11 @@ const ChatScreen = ({ route, navigation }) => {
         return;
       }
 
-      console.log('Forwarding message:', { conversationId: selectedMessage.conversationId, timestamp: selectedMessage.timestamp, newReceiverId });
+      console.log('Forwarding message:', {
+        conversationId: selectedMessage.conversationId,
+        timestamp: selectedMessage.timestamp,
+        newReceiverId,
+      });
       const response = await fetch(`${API_URL}/api/messages/forward`, {
         method: 'POST',
         headers: {
@@ -1313,7 +1647,6 @@ const ChatScreen = ({ route, navigation }) => {
   };
 
   const showMessageOptions = (conversationId, timestamp, senderId, isRecalled) => {
-    const message = messages.find((msg) => msg.conversationId === conversationId && msg.timestamp === timestamp);
     const options = [
       { text: 'Hủy', style: 'cancel' },
       {
@@ -1343,12 +1676,7 @@ const ChatScreen = ({ route, navigation }) => {
       onPress: () => handleDeleteMessage(conversationId, timestamp),
     });
 
-    Alert.alert(
-      'Tùy chọn',
-      'Chọn hành động',
-      options,
-      { cancelable: true }
-    );
+    Alert.alert('Tùy chọn', 'Chọn hành động', options, { cancelable: true });
   };
 
   if (loading) {
@@ -1361,7 +1689,9 @@ const ChatScreen = ({ route, navigation }) => {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles
+
+.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
@@ -1371,7 +1701,6 @@ const ChatScreen = ({ route, navigation }) => {
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>{receiverName || 'Unknown'}</Text>
-          {/* <Text style={styles.lastSeen}>Truy cập 14 phút trước</Text> */}
         </View>
         <View style={styles.headerIcons}>
           <TouchableOpacity>
@@ -1389,17 +1718,30 @@ const ChatScreen = ({ route, navigation }) => {
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       <FlatList
+        ref={flatListRef}
         data={messages}
-        keyExtractor={(item, index) => item?.timestamp?.toString() || index.toString()}
+        keyExtractor={(item, index) => `${item?.conversationId || 'unknown'}-${item?.timestamp?.toString() || 'no-timestamp'}-${item?.senderId || 'no-sender'}-${index}`}
+        extraData={messages}
         renderItem={({ item }) => {
           if (!item) return null;
-          console.log('Rendering message:', item);
+          console.log('Rendering message:', {
+            conversationId: item.conversationId,
+            content: item.content,
+            contentType: item.contentType,
+            timestamp: item.timestamp,
+            senderId: item.senderId,
+            receiverId: item.receiverId,
+            fileUrl: item.fileUrl,
+            isRecalled: item.isRecalled,
+            isRead: item.isRead,
+            readtime: item.readtime,
+          });
           return (
             <TouchableOpacity
               onLongPress={() => showMessageOptions(item.conversationId, item.timestamp, item.senderId, item.isRecalled)}
               style={[
                 item.contentType === 'text' ? styles.messageContainer : styles.mediaContainer,
-                item.senderId === currentUserId ? styles.sentMessage : styles.receivedMessage,
+                item.senderId === cleanCurrentUserId ? styles.sentMessage : styles.receivedMessage,
               ]}
             >
               {item.isRecalled ? (
@@ -1428,14 +1770,12 @@ const ChatScreen = ({ route, navigation }) => {
                 <Text style={styles.messageText}>{item.content || ''}</Text>
               )}
               <View style={styles.messageFooter}>
-                <Text style={styles.messageTime}>
-                  {item.timestamp
-                    ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : ''}
-                </Text>
-                {item.senderId === currentUserId && !item.isRecalled && (
+               
+                {item.senderId === cleanCurrentUserId && !item.isRecalled && (
                   <Text style={styles.readStatus}>
-                    {item.isRead ? 'Đã xem' : 'Đã gửi'}
+                    {item.isRead && item.readtime
+                      ? `Đã xem lúc ${new Date(item.readtime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Đã gửi'}
                   </Text>
                 )}
               </View>
@@ -1445,16 +1785,9 @@ const ChatScreen = ({ route, navigation }) => {
         contentContainerStyle={[styles.messageList, { paddingBottom: 80 }]}
       />
 
-      <Modal
-        visible={modalVisible}
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
-      >
+      <Modal visible={modalVisible} transparent={true} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalContainer}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setModalVisible(false)}
-          >
+          <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
             <Icon name="close" size={30} color="#FFF" />
           </TouchableOpacity>
           <ScrollView
@@ -1465,20 +1798,12 @@ const ChatScreen = ({ route, navigation }) => {
             showsHorizontalScrollIndicator={false}
             showsVerticalScrollIndicator={false}
           >
-            <Image
-              source={{ uri: selectedImage }}
-              style={styles.modalImage}
-              resizeMode="contain"
-            />
+            <Image source={{ uri: selectedImage }} style={styles.modalImage} resizeMode="contain" />
           </ScrollView>
         </View>
       </Modal>
 
-      <Modal
-        visible={forwardModalVisible}
-        transparent={true}
-        onRequestClose={() => setForwardModalVisible(false)}
-      >
+      <Modal visible={forwardModalVisible} transparent={true} onRequestClose={() => setForwardModalVisible(false)}>
         <View style={styles.modalContainer}>
           <View style={styles.forwardModalContent}>
             <Text style={styles.modalTitle}>Chuyển tiếp tin nhắn</Text>
@@ -1487,21 +1812,15 @@ const ChatScreen = ({ route, navigation }) => {
             ) : (
               <FlatList
                 data={users}
-                keyExtractor={(item) => item.userId}
+                keyExtractor={(item, index) => `${item.userId}-${index}`}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.userItem}
-                    onPress={() => handleForwardMessage(item.userId)}
-                  >
+                  <TouchableOpacity style={styles.userItem} onPress={() => handleForwardMessage(item.userId)}>
                     <Text style={styles.userName}>{item.username || 'Unknown'}</Text>
                   </TouchableOpacity>
                 )}
               />
             )}
-            <TouchableOpacity
-              style={styles.closeModalButton}
-              onPress={() => setForwardModalVisible(false)}
-            >
+            <TouchableOpacity style={styles.closeModalButton} onPress={() => setForwardModalVisible(false)}>
               <Text style={styles.closeModalText}>Đóng</Text>
             </TouchableOpacity>
           </View>
@@ -1537,7 +1856,6 @@ const ChatScreen = ({ route, navigation }) => {
 
 const { width, height } = Dimensions.get('window');
 
-// Cập nhật toàn bộ StyleSheet cho giao diện tin nhắn đẹp hơn
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1558,26 +1876,18 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: 20,
-    marginTop:30
   },
   headerContent: {
     flex: 1,
-    marginTop:30
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  lastSeen: {
-    fontSize: 12,
-    color: '#E0E0E0',
-    marginTop: 3,
-  },
   headerIcons: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop:25
   },
   headerIcon: {
     marginLeft: 20,
@@ -1610,14 +1920,14 @@ const styles = StyleSheet.create({
   },
   sentMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: 'white',
+    backgroundColor: '#0068FF',
   },
   receivedMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'black',
   },
   messageText: {
-    color: '#000',
+    color: '#FFF',
     fontSize: 16,
   },
   recalledText: {
@@ -1720,8 +2030,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalImage: {
-    width: Dimensions.get('window').width,
-    height: Dimensions.get('window').height * 0.9,
+    width: width,
+    height: height * 0.9,
   },
   forwardModalContent: {
     backgroundColor: '#FFF',
@@ -1765,4 +2075,4 @@ const styles = StyleSheet.create({
   },
 });
 
-    export default ChatScreen;
+export default ChatScreen;
