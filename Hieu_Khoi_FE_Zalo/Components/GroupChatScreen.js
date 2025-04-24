@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,41 +10,362 @@ import {
   Platform,
   Dimensions,
   Image,
+  Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import * as DocumentPicker from 'expo-document-picker'; // Thêm expo-document-picker
+import io from 'socket.io-client';
+import { API_URL } from '../config';
 
 const GroupChatScreen = ({ route, navigation }) => {
   const { groupId, groupName, currentUserId, members, ownerId } = route.params || {};
   const [newMessage, setNewMessage] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const flatListRef = useRef(null);
+  const socketRef = useRef(null);
 
-  // Dữ liệu giả lập cho danh sách tin nhắn
-  const messages = [
-    {
-      id: '1',
-      senderId: 'user1',
-      content: 'Chào mọi người!',
-      contentType: 'text',
-      timestamp: '2023-10-01T10:00:00Z',
-    },
-    {
-      id: '2',
-      senderId: currentUserId,
-      content: 'Xin chào nhóm!',
-      contentType: 'text',
-      timestamp: '2023-10-01T10:01:00Z',
-    },
-    {
-      id: '3',
-      senderId: 'user2',
-      content: 'https://example.com/image.jpg',
-      contentType: 'image',
-      timestamp: '2023-10-01T10:02:00Z',
-    },
-  ];
+  // Lấy danh sách tin nhắn
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) {
+          Alert.alert('Lỗi', 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+          navigation.navigate('Login');
+          return;
+        }
 
-  // Xử lý khi nhấn vào tên nhóm
+        const response = await fetch(`${API_URL}/api/group-chat/${groupId}?limit=20`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (response.status === 200) {
+          setMessages(data.items || []);
+          setLastEvaluatedKey(data.lastEvaluatedKey);
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+          socketRef.current.emit('readGroupMessage', { groupId, userId: currentUserId });
+        } else {
+          Alert.alert('Lỗi', data.message || 'Không thể lấy tin nhắn.');
+        }
+      } catch (err) {
+        Alert.alert('Lỗi', 'Không thể kết nối đến server: ' + err.message);
+      }
+    };
+
+    fetchMessages();
+  }, [groupId, navigation]);
+
+  // Tải thêm tin nhắn
+  const loadMoreMessages = async () => {
+    if (loadingMore || !lastEvaluatedKey) return;
+    setLoadingMore(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await fetch(
+        `${API_URL}/api/group-chat/${groupId}?limit=20&lastEvaluatedKey=${encodeURIComponent(
+          JSON.stringify(lastEvaluatedKey)
+        )}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await response.json();
+      if (response.status === 200) {
+        setMessages((prev) => [...data.items, ...prev]);
+        setLastEvaluatedKey(data.lastEvaluatedKey);
+      }
+    } catch (err) {
+      console.error('Error loading more messages:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // Khởi tạo Socket.IO
+  useEffect(() => {
+    const initSocket = async () => {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Lỗi', 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        navigation.navigate('Login');
+        return;
+      }
+
+      socketRef.current = io(API_URL, {
+        query: { token },
+        transports: ['websocket'],
+      });
+
+      socketRef.current.on('connect', () => {
+        socketRef.current.emit('joinGroup', groupId);
+      });
+
+      socketRef.current.on('receiveGroupMessage', (message) => {
+        setMessages((prev) => [...prev, message]);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      });
+
+      socketRef.current.on('groupMessageDeleted', ({ groupId: deletedGroupId, timestamp }) => {
+        if (deletedGroupId === groupId) {
+          setMessages((prev) => prev.filter((msg) => msg.timestamp !== timestamp));
+        }
+      });
+
+      socketRef.current.on('groupMessageRecalled', (recalledMessage) => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.messageId === recalledMessage.messageId ? recalledMessage : msg
+          )
+        );
+      });
+
+      socketRef.current.on('connect_error', (err) => {
+        Alert.alert('Lỗi kết nối', 'Không thể kết nối đến server. Vui lòng kiểm tra mạng.');
+      });
+
+      return () => {
+        socketRef.current?.emit('leaveGroup', groupId);
+        socketRef.current?.disconnect();
+      };
+    };
+
+    initSocket();
+  }, [groupId, navigation]);
+
+  // Gửi tin nhắn văn bản
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
+
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Lỗi', 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        navigation.navigate('Login');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/group-chat/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          groupId,
+          content: newMessage,
+          type: 'text',
+        }),
+      });
+
+      const data = await response.json();
+      if (response.status === 201) {
+        setNewMessage('');
+      } else {
+        Alert.alert('Lỗi', data.message || 'Không thể gửi tin nhắn.');
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', 'Không thể kết nối đến server: ' + err.message);
+    }
+  };
+
+  // Gửi file/hình ảnh
+  const handleSelectFile = async () => {
+    try {
+     // Mở trình chọn file
+     const result = await DocumentPicker.getDocumentAsync({
+      type: ['image/*', 'video/*', 'application/pdf'],
+      copyToCacheDirectory: true,
+    });
+    console.log('Document picker result:', result);
+    // Kiểm tra kết quả
+    if (result.canceled) {
+      console.log('User cancelled document picker');
+      return;
+    }
+
+    if (!result.assets || result.assets.length === 0) {
+      Alert.alert('Lỗi', 'Không thể lấy thông tin file.');
+      return;
+    }
+
+      const { uri, name, mimeType } = result;
+      const file = {
+        uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
+        name: name || 'file',
+        type: mimeType || 'application/octet-stream',
+      };
+
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Lỗi', 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        navigation.navigate('Login');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('groupId', groupId);
+      formData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
+
+      const response = await fetch(`${API_URL}/api/group-chat/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await response.json();
+      console.log('API response:', { status: response.status, data });
+      if (response.status === 201) {
+        Alert.alert('Thành công', 'Đã gửi file.');
+      } else {
+        Alert.alert('Lỗi', data.message || 'Không thể gửi file.');
+      }
+    } catch (err) {
+      Alert.alert('Lỗi', 'Không thể chọn file: ' + err.message);
+    }
+  };
+
+  // Thu hồi tin nhắn
+  const handleRecallMessage = async (messageId) => {
+    Alert.alert('Thu hồi tin nhắn', 'Bạn có chắc chắn muốn thu hồi tin nhắn này?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Thu hồi',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) {
+              Alert.alert('Lỗi', 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+              navigation.navigate('Login');
+              return;
+            }
+
+            const response = await fetch(`${API_URL}/api/group-chat/recall`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                messageId,
+                senderId: currentUserId,
+              }),
+            });
+
+            const data = await response.json();
+            if (response.status === 200) {
+              Alert.alert('Thành công', 'Tin nhắn đã được thu hồi.');
+            } else {
+              Alert.alert('Lỗi', data.message || 'Không thể thu hồi tin nhắn.');
+            }
+          } catch (err) {
+            Alert.alert('Lỗi', 'Không thể kết nối đến server: ' + err.message);
+          }
+        },
+      },
+    ]);
+  };
+
+  // Xóa tin nhắn
+  const handleDeleteMessage = async (messageId, timestamp) => {
+    Alert.alert('Xóa tin nhắn', 'Bạn có chắc chắn muốn xóa tin nhắn này?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) {
+              Alert.alert('Lỗi', 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+              navigation.navigate('Login');
+              return;
+            }
+
+            const response = await fetch(`${API_URL}/api/group-chat/`, {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                groupId,
+                timestamp,
+              }),
+            });
+
+            const data = await response.json();
+            if (response.status === 200) {
+              Alert.alert('Thành công', 'Tin nhắn đã được xóa.');
+            } else {
+              Alert.alert('Lỗi', data.message || 'Không thể xóa tin nhắn.');
+            }
+          } catch (err) {
+            Alert.alert('Lỗi', 'Không thể kết nối đến server: ' + err.message);
+          }
+        },
+      },
+    ]);
+  };
+
+  // Render tin nhắn
+  const renderMessage = ({ item }) => {
+    const isSent = item.senderId === currentUserId;
+    const sender = members.find((m) => m.userId === item.senderId) || { username: 'Unknown' };
+    return (
+      <TouchableOpacity
+        style={[
+          item.contentType === 'text' ? styles.messageContainer : styles.mediaContainer,
+          isSent ? styles.sentMessage : styles.receivedMessage,
+        ]}
+        onLongPress={() =>
+          isSent &&
+          !item.isRecalled &&
+          Alert.alert('Tùy chọn', 'Chọn hành động', [
+            { text: 'Hủy', style: 'cancel' },
+            { text: 'Thu hồi', onPress: () => handleRecallMessage(item.messageId) },
+            {
+              text: 'Xóa',
+              onPress: () => handleDeleteMessage(item.messageId, item.timestamp),
+            },
+          ])
+        }
+      >
+        {!isSent && <Text style={styles.senderName}>{sender.username}</Text>}
+        {item.isRecalled ? (
+          <Text style={[styles.messageText, { fontStyle: 'italic' }]}>
+            Tin nhắn đã được thu hồi
+          </Text>
+        ) : item.type === 'text' ? (
+          <Text style={styles.messageText}>{item.content}</Text>
+        ) : item.type === 'image' ? (
+          item.fileUrl ? (
+            <Image
+              source={{ uri: item.fileUrl }}
+              style={styles.imagePreview}
+              resizeMode="contain"
+            />
+          ) : (
+            <Text style={styles.messageText}>[Hình ảnh không khả dụng]</Text>
+          )
+        ) : (
+          <Text style={styles.messageText}>
+            [File: {item.fileUrl ? item.fileUrl.split('/').pop() : 'Không khả dụng!!!'}]
+          </Text>
+        )}
+        <Text style={styles.timestamp}>
+          {new Date(item.timestamp).toLocaleTimeString()}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  // Chuyển đến màn hình thông tin nhóm
   const handleGroupNamePress = () => {
     navigation.navigate('GroupInfoScreen', {
       groupId,
@@ -55,42 +376,12 @@ const GroupChatScreen = ({ route, navigation }) => {
     });
   };
 
-  // Xử lý gửi tin nhắn (giả lập)
-  const handleSendMessage = () => {
-    if (newMessage.trim()) {
-      setNewMessage('');
-      // Có thể thêm logic gửi tin nhắn nếu tích hợp API
-    }
-  };
-
-  // Render tin nhắn
-  const renderMessage = ({ item }) => {
-    const isSent = item.senderId === currentUserId;
-    return (
-      <View
-        style={[
-          item.contentType === 'text' ? styles.messageContainer : styles.mediaContainer,
-          isSent ? styles.sentMessage : styles.receivedMessage,
-        ]}
-      >
-        {item.contentType === 'text' ? (
-          <Text style={styles.messageText}>{item.content}</Text>
-        ) : item.contentType === 'image' ? (
-          <Image source={{ uri: item.content }} style={styles.imagePreview} resizeMode="contain" />
-        ) : (
-          <Text style={styles.messageText}>[File]</Text>
-        )}
-      </View>
-    );
-  };
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={26} color="#FFFFFF" style={styles.backButton} />
@@ -111,21 +402,25 @@ const GroupChatScreen = ({ route, navigation }) => {
         </View>
       </View>
 
-      {/* Danh sách tin nhắn */}
       <FlatList
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.messageId}
         contentContainerStyle={[styles.messageList, { paddingBottom: 80 }]}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        onEndReached={loadMoreMessages}
+        onEndReachedThreshold={0.1}
+        ListFooterComponent={
+          loadingMore ? <ActivityIndicator size="small" color="#0068FF" /> : null
+        }
       />
 
-      {/* Input gửi tin nhắn */}
       <View style={styles.inputContainer}>
-        <TouchableOpacity style={styles.fileButton}>
+        <TouchableOpacity style={styles.fileButton} onPress={handleSelectFile}>
           <Icon name="attach-file" size={26} color="#666" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.imageButton}>
+        <TouchableOpacity style={styles.imageButton} onPress={handleSelectFile}>
           <Icon name="photo" size={26} color="#666" />
         </TouchableOpacity>
         <TextInput
@@ -213,7 +508,12 @@ const styles = StyleSheet.create({
   },
   receivedMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: 'black',
+    backgroundColor: '#333',
+  },
+  senderName: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
   },
   messageText: {
     color: '#FFF',
@@ -227,6 +527,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEE',
     borderWidth: 1,
     borderColor: '#DDD',
+  },
+  timestamp: {
+    fontSize: 12,
+    color: '#999',
+    alignSelf: 'flex-end',
+    marginTop: 4,
   },
   inputContainer: {
     flexDirection: 'row',

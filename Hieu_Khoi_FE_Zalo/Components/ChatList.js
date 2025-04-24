@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,12 +8,13 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { debounce } from 'lodash';
-import { API_URL } from '../config';
 import io from 'socket.io-client';
+import { API_URL } from '../config';
 import Footer from './Footer';
 
 const DEFAULT_AVATAR = 'https://via.placeholder.com/50';
@@ -38,10 +38,7 @@ const ChatList = ({ navigation }) => {
   const formatTimestamp = (timestamp) => {
     try {
       const date = new Date(timestamp);
-      if (isNaN(date.getTime())) {
-        console.error('Invalid timestamp:', timestamp);
-        return 'N/A';
-      }
+      if (isNaN(date.getTime())) return 'N/A';
       return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     } catch (err) {
       console.error('Error formatting timestamp:', timestamp, err);
@@ -49,7 +46,7 @@ const ChatList = ({ navigation }) => {
     }
   };
 
-  // Hàm lấy danh sách cuộc trò chuyện
+  // Lấy danh sách cuộc trò chuyện
   const fetchConversations = async (token) => {
     try {
       const response = await fetch(`${API_URL}/api/messages/conversations`, {
@@ -57,7 +54,6 @@ const ChatList = ({ navigation }) => {
       });
       const data = await response.json();
       if (response.status === 200) {
-        console.log('Fetched conversations:', JSON.stringify(data, null, 2));
         setConversations(data);
       } else {
         throw new Error(data.message || 'Không thể tải danh sách cuộc trò chuyện');
@@ -68,7 +64,7 @@ const ChatList = ({ navigation }) => {
     }
   };
 
-  // Hàm lấy danh sách nhóm
+  // Lấy danh sách nhóm
   const fetchGroups = async (token) => {
     try {
       const response = await fetch(`${API_URL}/api/groups/my-groups`, {
@@ -76,7 +72,6 @@ const ChatList = ({ navigation }) => {
       });
       const data = await response.json();
       if (response.status === 200) {
-        console.log('Fetched groups:', JSON.stringify(data, null, 2));
         setGroups(data);
       } else {
         throw new Error(data.message || 'Không thể tải danh sách nhóm');
@@ -87,7 +82,7 @@ const ChatList = ({ navigation }) => {
     }
   };
 
-  // Hàm lấy danh sách bạn bè
+  // Lấy danh sách bạn bè
   const fetchFriends = async (token) => {
     try {
       const response = await fetch(`${API_URL}/api/friends/list`, {
@@ -95,7 +90,6 @@ const ChatList = ({ navigation }) => {
       });
       const data = await response.json();
       if (response.status === 200) {
-        console.log('Fetched friends:', JSON.stringify(data, null, 2));
         setFriends(data.friends || []);
       } else {
         throw new Error(data.message || 'Không thể tải danh sách bạn bè');
@@ -106,12 +100,12 @@ const ChatList = ({ navigation }) => {
     }
   };
 
+  // Khởi tạo dữ liệu và Socket.IO
   useEffect(() => {
     const fetchData = async () => {
       try {
         const token = await AsyncStorage.getItem('token');
         if (!token) {
-          console.log('No token found, navigating to Login');
           navigation.navigate('Login');
           return;
         }
@@ -121,10 +115,7 @@ const ChatList = ({ navigation }) => {
         });
         const profileData = await profileResponse.json();
         if (profileResponse.status === 200) {
-          console.log('Profile data:', profileData);
-          if (!profileData.userId) {
-            throw new Error('Không tìm thấy userId trong profile');
-          }
+          if (!profileData.userId) throw new Error('Không tìm thấy userId');
           setCurrentUserId(profileData.userId);
         } else {
           throw new Error(profileData.message || 'Không thể lấy thông tin người dùng');
@@ -134,7 +125,6 @@ const ChatList = ({ navigation }) => {
           headers: { Authorization: `Bearer ${token}` },
         });
         const contactsData = await contactsResponse.json();
-        console.log('Contacts data:', contactsData);
         if (contactsResponse.status === 200) {
           const contactsMap = {};
           contactsData.forEach((contact) => {
@@ -145,11 +135,7 @@ const ChatList = ({ navigation }) => {
           throw new Error(contactsData.message || 'Không thể tải danh sách liên hệ');
         }
 
-        await Promise.all([
-          fetchConversations(token),
-          fetchGroups(token),
-          fetchFriends(token),
-        ]);
+        await Promise.all([fetchConversations(token), fetchGroups(token), fetchFriends(token)]);
       } catch (err) {
         setSearchError(err.message);
         console.error('Fetch data error:', err);
@@ -161,7 +147,6 @@ const ChatList = ({ navigation }) => {
     const initSocket = async () => {
       const token = await AsyncStorage.getItem('token');
       if (!token) {
-        console.log('No token for socket, navigating to Login');
         navigation.navigate('Login');
         return;
       }
@@ -175,19 +160,11 @@ const ChatList = ({ navigation }) => {
 
       socketInstance.on('connect', () => {
         console.log('Socket connected:', socketInstance.id);
-        if (currentUserId) {
-          socketInstance.emit('register', currentUserId);
-          console.log('Emitted register with userId:', currentUserId);
-        }
+        if (currentUserId) socketInstance.emit('register', currentUserId);
       });
 
       socketInstance.on('updateChatList', (data) => {
-        console.log('Received updateChatList:', JSON.stringify(data, null, 2));
-        if (!data || !data.conversationId || !data.lastMessage || !data.senderId || !data.receiverId) {
-          console.error('Invalid updateChatList data:', data);
-          return;
-        }
-
+        if (!data || !data.conversationId || !data.lastMessage) return;
         setConversations((prev) => {
           const otherUserId = data.senderId === currentUserId ? data.receiverId : data.senderId;
           const existingConv = prev.find((conv) => conv.conversationId === data.conversationId);
@@ -238,14 +215,9 @@ const ChatList = ({ navigation }) => {
           }
 
           if (data.receiverId === currentUserId) {
-            setNewMessages((prev) => {
-              const updated = new Set(prev);
-              updated.add(data.conversationId);
-              return updated;
-            });
+            setNewMessages((prev) => new Set(prev).add(data.conversationId));
           }
 
-          console.log('Updated conversations:', JSON.stringify(updatedConversations, null, 2));
           return updatedConversations.sort(
             (a, b) => new Date(b.lastMessage.timestamp) - new Date(a.lastMessage.timestamp)
           );
@@ -253,15 +225,11 @@ const ChatList = ({ navigation }) => {
       });
 
       socketInstance.on(`newGroup_${currentUserId}`, (data) => {
-        console.log(`Received newGroup_${currentUserId}:`, JSON.stringify(data, null, 2));
+        if (!data.groupId || !data.members || !Array.isArray(data.members)) return;
         setGroups((prev) => {
           if (!prev.some((group) => group.groupId === data.groupId)) {
             return [
-              {
-                ...data,
-                lastMessage: null,
-                unreadCount: 0,
-              },
+              { ...data, lastMessage: null, unreadCount: 0 },
               ...prev,
             ].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
           }
@@ -270,41 +238,75 @@ const ChatList = ({ navigation }) => {
       });
 
       socketInstance.on('receiveGroupMessage', (data) => {
-        console.log('Received receiveGroupMessage:', JSON.stringify(data, null, 2));
         setGroups((prev) => {
           const existingGroup = prev.find((group) => group.groupId === data.groupId);
           if (existingGroup) {
-            return prev.map((group) =>
-              group.groupId === data.groupId
-                ? {
-                    ...group,
-                    lastMessage: {
-                      content: data.content || 'File',
-                      contentType: data.contentType || 'text',
-                      fileUrl: data.fileUrl,
-                      timestamp: data.timestamp,
-                      senderId: data.senderId,
-                      senderName: data.senderName,
-                      readBy: data.readBy || {},
-                      isRecalled: data.isRecalled || false,
-                    },
-                    unreadCount: (group.unreadCount || 0) + 1,
-                  }
-                : group
-            ).sort((a, b) => new Date(b.lastMessage?.timestamp || b.createdAt || 0) - new Date(a.lastMessage?.timestamp || a.createdAt || 0));
+            return prev
+              .map((group) =>
+                group.groupId === data.groupId
+                  ? {
+                      ...group,
+                      lastMessage: {
+                        content: data.content || 'File',
+                        contentType: data.contentType || 'text',
+                        fileUrl: data.fileUrl,
+                        timestamp: data.timestamp,
+                        senderId: data.senderId,
+                        senderName: data.senderName || 'Unknown',
+                        readBy: data.readBy || {},
+                        isRecalled: data.isRecalled || false,
+                      },
+                      unreadCount:
+                        data.senderId !== currentUserId
+                          ? (group.unreadCount || 0) + 1
+                          : group.unreadCount,
+                    }
+                  : group
+              )
+              .sort(
+                (a, b) =>
+                  new Date(b.lastMessage?.timestamp || b.createdAt || 0) -
+                  new Date(a.lastMessage?.timestamp || a.createdAt || 0)
+              );
           }
           return prev;
         });
-        setNewMessages((prev) => new Set(prev).add(data.groupId));
+        if (data.senderId !== currentUserId) {
+          setNewMessages((prev) => new Set(prev).add(data.groupId));
+        }
       });
 
       socketInstance.on(`groupDisbanded_${currentUserId}`, ({ groupId }) => {
-        console.log(`Received groupDisbanded_${currentUserId}:`, groupId);
         setGroups((prev) => prev.filter((group) => group.groupId !== groupId));
       });
 
+      socketInstance.on('groupMessageRead', ({ groupId, userId, readTime }) => {
+        setGroups((prev) =>
+          prev.map((group) =>
+            group.groupId === groupId
+              ? {
+                  ...group,
+                  lastMessage: group.lastMessage
+                    ? {
+                        ...group.lastMessage,
+                        readBy: { ...group.lastMessage.readBy, [userId]: readTime },
+                      }
+                    : group.lastMessage,
+                  unreadCount: userId === currentUserId ? 0 : group.unreadCount,
+                }
+              : group
+          )
+        );
+        if (userId === currentUserId) {
+          setNewMessages((prev) => {
+            const updated = new Set(prev);
+            updated.delete(groupId);
+            return updated;
+          });
+        }
+      });
+
       socketInstance.on('messageRead', (data) => {
-        console.log('Received messageRead:', JSON.stringify(data, null, 2));
         setConversations((prev) =>
           prev.map((conv) =>
             conv.conversationId === data.conversationId
@@ -328,29 +330,21 @@ const ChatList = ({ navigation }) => {
       });
 
       socketInstance.on('userStatus', ({ userId, status }) => {
-        console.log('User status:', { userId, status });
         setOnlineUsers((prev) => {
           const updated = new Set(prev);
-          if (status === 'online') {
-            updated.add(userId);
-          } else {
-            updated.delete(userId);
-          }
+          if (status === 'online') updated.add(userId);
+          else updated.delete(userId);
           return updated;
         });
       });
 
       socketInstance.on('connect_error', (err) => {
         console.error('Socket connect_error:', err.message);
-        setSearchError('Socket error: ' + err.message);
+        Alert.alert('Lỗi kết nối', 'Không thể kết nối đến server. Vui lòng kiểm tra mạng.');
       });
 
       socketInstance.on('reconnect', (attempt) => {
-        console.log('Socket reconnected after attempt:', attempt);
-        if (currentUserId) {
-          socketInstance.emit('register', currentUserId);
-          console.log('Re-emitted register with userId:', currentUserId);
-        }
+        if (currentUserId) socketInstance.emit('register', currentUserId);
       });
 
       socketInstance.on('disconnect', () => {
@@ -359,42 +353,33 @@ const ChatList = ({ navigation }) => {
 
       setSocket(socketInstance);
 
-      return () => {
-        socketInstance.disconnect();
-        console.log('Socket disconnected');
-      };
+      return () => socketInstance.disconnect();
     };
 
     fetchData();
     initSocket();
 
-    return () => {
-      if (socket) {
-        socket.disconnect();
-      }
-    };
+    return () => socket?.disconnect();
   }, [navigation]);
 
+  // Đăng ký lại socket khi currentUserId thay đổi
   useEffect(() => {
-    if (socket && currentUserId) {
-      socket.emit('register', currentUserId);
-      console.log('Re-registered socket with userId:', currentUserId);
-    }
+    if (socket && currentUserId) socket.emit('register', currentUserId);
   }, [socket, currentUserId]);
 
+  // Tự động tải lại danh sách hội thoại
   useEffect(() => {
     const interval = setInterval(async () => {
       const token = await AsyncStorage.getItem('token');
-      if (token) {
-        console.log('Auto-reloading conversations...');
-        await fetchConversations(token);
-      }
-    }, 10000000); // Mỗi 10 giây
+      if (token) await fetchConversations(token);
+    }, 60000); // Mỗi 60 giây
     return () => clearInterval(interval);
   }, []);
 
+  // Kiểm tra email hợp lệ
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
+  // Gửi lời mời kết bạn
   const handleSendFriendRequest = async (email) => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -419,16 +404,16 @@ const ChatList = ({ navigation }) => {
             user.email === email ? { ...user, friendRequestSent: true } : user
           )
         );
-        setSearchError('');
-        alert('Lời mời kết bạn đã được gửi');
+        Alert.alert('Thành công', 'Lời mời kết bạn đã được gửi');
       } else {
-        setSearchError(data.message || 'Không thể gửi lời mời kết bạn');
+        Alert.alert('Lỗi', data.message || 'Không thể gửi lời mời kết bạn');
       }
     } catch (err) {
-      setSearchError('Không thể kết nối đến server: ' + err.message);
+      Alert.alert('Lỗi', 'Không thể kết nối đến server: ' + err.message);
     }
   };
 
+  // Tìm kiếm người dùng
   const handleSearch = async (text) => {
     setSearchText(text);
     setSearchError('');
@@ -439,7 +424,6 @@ const ChatList = ({ navigation }) => {
       if (!isValidEmail(text)) {
         setSearchError('Vui lòng nhập email hợp lệ');
         setSearchLoading(false);
-        setSearchResults([]);
         return;
       }
 
@@ -450,16 +434,15 @@ const ChatList = ({ navigation }) => {
           return;
         }
 
-        const searchResponse = await fetch(`${API_URL}/api/user/search?email=${encodeURIComponent(text)}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const searchData = await searchResponse.json();
-        console.log('Search result from /api/user/search:', searchData);
-
-        if (searchResponse.status === 200) {
-          const users = Array.isArray(searchData) ? searchData : searchData.userId ? [searchData] : [];
+        const response = await fetch(
+          `${API_URL}/api/user/search?email=${encodeURIComponent(text)}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const data = await response.json();
+        if (response.status === 200) {
+          const users = Array.isArray(data) ? data : data.userId ? [data] : [];
           if (users.length > 0) {
             const uniqueUsers = [...new Map(users.map((user) => [user.userId, user])).values()].filter(
               (user) => user.userId !== currentUserId
@@ -467,16 +450,14 @@ const ChatList = ({ navigation }) => {
 
             const detailedUsers = await Promise.all(
               uniqueUsers.map(async (user) => {
-                console.log('Processing user from search:', user);
                 try {
-                  const profileResponse = await fetch(`${API_URL}/api/user/profile?userId=${user.userId}`, {
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                    },
-                  });
+                  const profileResponse = await fetch(
+                    `${API_URL}/api/user/profile?userId=${user.userId}`,
+                    {
+                      headers: { Authorization: `Bearer ${token}` },
+                    }
+                  );
                   const profileData = await profileResponse.json();
-                  console.log(`Profile data for user ${user.userId}:`, profileData);
-
                   if (profileResponse.status === 200) {
                     return {
                       userId: user.userId,
@@ -485,35 +466,25 @@ const ChatList = ({ navigation }) => {
                       avatarUrl: profileData.avatarUrl || DEFAULT_AVATAR,
                       friendRequestSent: false,
                     };
-                  } else {
-                    console.error(`Profile fetch error for user ${user.userId}:`, profileData.message);
-                    return null;
                   }
-                } catch (profileErr) {
-                  console.error(`Profile fetch error for user ${user.userId}:`, profileErr);
+                  return null;
+                } catch (err) {
                   return null;
                 }
               })
             );
 
             const filteredResults = detailedUsers.filter((user) => user);
-            console.log('Final searchResults:', filteredResults);
             setSearchResults(filteredResults);
-            if (filteredResults.length === 0) {
-              setSearchError('Không tìm thấy người dùng');
-            }
+            if (filteredResults.length === 0) setSearchError('Không tìm thấy người dùng');
           } else {
-            setSearchResults([]);
             setSearchError('Không tìm thấy người dùng');
           }
         } else {
-          setSearchResults([]);
-          setSearchError(searchData.message || 'Không tìm thấy người dùng');
+          setSearchError(data.message || 'Không tìm thấy người dùng');
         }
       } catch (err) {
-        console.error('Search error:', err);
         setSearchError('Không thể tìm kiếm: ' + err.message);
-        setSearchResults([]);
       } finally {
         setSearchLoading(false);
       }
@@ -525,7 +496,6 @@ const ChatList = ({ navigation }) => {
   };
 
   const debouncedSearch = debounce(handleSearch, 500);
-
   const filteredData = searchText.length > 2 ? searchResults : [...conversations, ...groups];
 
   if (loading) {
@@ -556,14 +526,7 @@ const ChatList = ({ navigation }) => {
           <Icon name="qr-code-scanner" size={24} color="#FFFFFF" style={styles.headerIcon} />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => {
-            console.log('Create group button pressed', { friends });
-            if (!friends || !Array.isArray(friends)) {
-              setSearchError('Danh sách bạn bè không hợp lệ');
-              return;
-            }
-            navigation.navigate('CreateGroupScreen', { friends });
-          }}
+          onPress={() => navigation.navigate('CreateGroupScreen', { friends })}
         >
           <Icon name="group-add" size={24} color="#FFFFFF" style={styles.headerIcon} />
         </TouchableOpacity>
@@ -582,7 +545,9 @@ const ChatList = ({ navigation }) => {
 
       {filteredData.length === 0 && !searchLoading && !searchError && (
         <Text style={styles.noResultsText}>
-          {searchText.length > 2 ? 'Không tìm thấy người dùng' : 'Chưa có cuộc hội thoại hoặc nhóm nào'}
+          {searchText.length > 2
+            ? 'Không tìm thấy người dùng'
+            : 'Chưa có cuộc hội thoại hoặc nhóm nào'}
         </Text>
       )}
 
@@ -595,18 +560,18 @@ const ChatList = ({ navigation }) => {
           const contact = isSearchResult
             ? item
             : isGroup
-              ? { username: item.name, email: item.name, avatarUrl: item.avatarUrl || DEFAULT_AVATAR }
-              : contacts[item.otherUserId] || {
-                  username: 'Unknown',
-                  email: 'Unknown',
-                  avatarUrl: DEFAULT_AVATAR,
-                };
+            ? { username: item.name, email: item.name, avatarUrl: item.avatarUrl || DEFAULT_AVATAR }
+            : contacts[item.otherUserId] || {
+                username: 'Unknown',
+                email: 'Unknown',
+                avatarUrl: DEFAULT_AVATAR,
+              };
           const isNewMessage = !isSearchResult && newMessages.has(item.conversationId || item.groupId);
 
-          // Làm giàu dữ liệu members với username từ contacts hoặc friends
           const enrichedMembers = isGroup
             ? item.members.map((member) => {
-                const contactInfo = contacts[member.userId] || friends.find((f) => f.userId === member.userId);
+                const contactInfo =
+                  contacts[member.userId] || friends.find((f) => f.userId === member.userId);
                 return {
                   ...member,
                   username: contactInfo?.username || 'Unknown',
@@ -614,32 +579,10 @@ const ChatList = ({ navigation }) => {
               })
             : item.members;
 
-          console.log('Rendering item:', {
-            isSearchResult,
-            isGroup,
-            id: isSearchResult ? item.userId : item.groupId || item.otherUserId,
-            username: contact.username,
-            email: contact.email,
-            avatarUrl: contact.avatarUrl,
-            unreadCount: isSearchResult ? null : item.unreadCount,
-            lastMessage: isSearchResult ? null : item.lastMessage,
-            members: isGroup ? enrichedMembers : null,
-          });
-
           return (
             <TouchableOpacity
               style={styles.chatItem}
               onPress={() => {
-                console.log('Navigating to:', {
-                  isGroup,
-                  id: isSearchResult ? item.userId : item.groupId || item.otherUserId,
-                  name: contact.username || contact.email,
-                  currentUserId,
-                });
-                if (!currentUserId || !(isSearchResult ? item.userId : item.groupId || item.otherUserId)) {
-                  setSearchError('Thiếu ID người dùng hoặc nhóm');
-                  return;
-                }
                 if (!isSearchResult) {
                   setNewMessages((prev) => {
                     const updated = new Set(prev);
@@ -649,11 +592,10 @@ const ChatList = ({ navigation }) => {
                   if (isGroup) {
                     setGroups((prev) =>
                       prev.map((group) =>
-                        group.groupId === item.groupId
-                          ? { ...group, unreadCount: 0 }
-                          : group
+                        group.groupId === item.groupId ? { ...group, unreadCount: 0 } : group
                       )
                     );
+                    socket.emit('readGroupMessage', { groupId: item.groupId, userId: currentUserId });
                   } else {
                     setConversations((prev) =>
                       prev.map((conv) =>
@@ -673,7 +615,7 @@ const ChatList = ({ navigation }) => {
                     groupId: item.groupId,
                     groupName: item.name,
                     currentUserId,
-                    members: enrichedMembers, // Truyền members đã làm giàu
+                    members: enrichedMembers,
                     ownerId: item.ownerId,
                   });
                 } else {
@@ -687,16 +629,14 @@ const ChatList = ({ navigation }) => {
             >
               <View style={styles.avatarContainer}>
                 <Image
-                  source={{
-                    uri: contact.avatarUrl || DEFAULT_AVATAR,
-                  }}
+                  source={{ uri: contact.avatarUrl || DEFAULT_AVATAR }}
                   style={styles.avatar}
                   defaultSource={{ uri: DEFAULT_AVATAR }}
-                  onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
                 />
-                {!isGroup && onlineUsers.has(isSearchResult ? item.userId : item.otherUserId) && (
-                  <View style={styles.onlineBadge} />
-                )}
+                {!isGroup &&
+                  onlineUsers.has(isSearchResult ? item.userId : item.otherUserId) && (
+                    <View style={styles.onlineBadge} />
+                  )}
               </View>
               <View style={styles.chatInfo}>
                 <View style={styles.chatNameContainer}>
@@ -709,7 +649,10 @@ const ChatList = ({ navigation }) => {
                   <View style={styles.searchResultContainer}>
                     <Text style={styles.chatMessage}>{contact.email}</Text>
                     <TouchableOpacity
-                      style={[styles.friendButton, item.friendRequestSent ? styles.disabledButton : null]}
+                      style={[
+                        styles.friendButton,
+                        item.friendRequestSent ? styles.disabledButton : null,
+                      ]}
                       onPress={() => handleSendFriendRequest(contact.email)}
                       disabled={item.friendRequestSent}
                     >
@@ -730,19 +673,21 @@ const ChatList = ({ navigation }) => {
                       ? item.lastMessage
                         ? item.lastMessage.isRecalled
                           ? 'Tin nhắn đã được thu hồi'
+                          : item.lastMessage.contentType === 'image'
+                          ? '[Hình ảnh]'
                           : item.lastMessage.contentType === 'file'
-                            ? '[Tệp]'
-                            : item.lastMessage.contentType === 'image'
-                              ? '[Hình ảnh]'
-                              : `${item.lastMessage.senderName}: ${item.lastMessage.content || 'Tin nhắn mới'}`
+                          ? '[Tệp]'
+                          : `${item.lastMessage.senderName || 'Unknown'}: ${
+                              item.lastMessage.content || 'Tin nhắn mới'
+                            }`
                         : 'Nhóm mới được tạo'
                       : item.lastMessage?.isRecalled
-                        ? 'Tin nhắn đã được thu hồi'
-                        : item.lastMessage?.contentType === 'image'
-                          ? '[Hình ảnh]'
-                          : item.lastMessage?.contentType === 'file'
-                            ? '[Tệp]'
-                            : item.lastMessage?.content || 'Bạn có tin nhắn mới'}
+                      ? 'Tin nhắn đã được thu hồi'
+                      : item.lastMessage?.contentType === 'image'
+                      ? '[Hình ảnh]'
+                      : item.lastMessage?.contentType === 'file'
+                      ? '[Tệp]'
+                      : item.lastMessage?.content || 'Bạn có tin nhắn mới'}
                   </Text>
                 )}
               </View>
@@ -754,8 +699,8 @@ const ChatList = ({ navigation }) => {
                         ? formatTimestamp(item.lastMessage.timestamp)
                         : formatTimestamp(item.createdAt)
                       : item.lastMessage?.readtime
-                        ? formatTimestamp(item.lastMessage.readtime)
-                        : formatTimestamp(item.lastMessage?.timestamp)}
+                      ? formatTimestamp(item.lastMessage.readtime)
+                      : formatTimestamp(item.lastMessage?.timestamp)}
                   </Text>
                   {item.unreadCount > 0 && (
                     <View style={styles.unreadBadge}>
@@ -770,7 +715,6 @@ const ChatList = ({ navigation }) => {
           );
         }}
       />
-
       <Footer navigation={navigation} />
     </View>
   );
