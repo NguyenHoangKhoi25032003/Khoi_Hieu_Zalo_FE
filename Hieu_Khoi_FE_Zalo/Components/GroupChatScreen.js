@@ -11,11 +11,12 @@ import {
   Dimensions,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import * as DocumentPicker from 'expo-document-picker'; // Thêm expo-document-picker
+import * as DocumentPicker from 'expo-document-picker';
 import io from 'socket.io-client';
 import { API_URL } from '../config';
 
@@ -27,6 +28,11 @@ const GroupChatScreen = ({ route, navigation }) => {
   const [loadingMore, setLoadingMore] = useState(false);
   const flatListRef = useRef(null);
   const socketRef = useRef(null);
+
+  // Hàm sắp xếp tin nhắn theo timestamp tăng dần
+  const sortMessages = (msgs) => {
+    return msgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  };
 
   // Lấy danh sách tin nhắn
   useEffect(() => {
@@ -44,7 +50,7 @@ const GroupChatScreen = ({ route, navigation }) => {
         });
         const data = await response.json();
         if (response.status === 200) {
-          setMessages(data.items || []);
+          setMessages(sortMessages(data.items || []));
           setLastEvaluatedKey(data.lastEvaluatedKey);
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
           socketRef.current.emit('readGroupMessage', { groupId, userId: currentUserId });
@@ -75,7 +81,7 @@ const GroupChatScreen = ({ route, navigation }) => {
       );
       const data = await response.json();
       if (response.status === 200) {
-        setMessages((prev) => [...data.items, ...prev]);
+        setMessages((prev) => sortMessages([...data.items, ...prev]));
         setLastEvaluatedKey(data.lastEvaluatedKey);
       }
     } catch (err) {
@@ -105,7 +111,7 @@ const GroupChatScreen = ({ route, navigation }) => {
       });
 
       socketRef.current.on('receiveGroupMessage', (message) => {
-        setMessages((prev) => [...prev, message]);
+        setMessages((prev) => sortMessages([...prev, message]));
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       });
 
@@ -117,8 +123,10 @@ const GroupChatScreen = ({ route, navigation }) => {
 
       socketRef.current.on('groupMessageRecalled', (recalledMessage) => {
         setMessages((prev) =>
-          prev.map((msg) =>
-            msg.messageId === recalledMessage.messageId ? recalledMessage : msg
+          sortMessages(
+            prev.map((msg) =>
+              msg.messageId === recalledMessage.messageId ? recalledMessage : msg
+            )
           )
         );
       });
@@ -175,27 +183,20 @@ const GroupChatScreen = ({ route, navigation }) => {
   // Gửi file/hình ảnh
   const handleSelectFile = async () => {
     try {
-     // Mở trình chọn file
-     const result = await DocumentPicker.getDocumentAsync({
-      type: ['image/*', 'video/*', 'application/pdf'],
-      copyToCacheDirectory: true,
-    });
-    console.log('Document picker result:', result);
-    // Kiểm tra kết quả
-    if (result.canceled) {
-      console.log('User cancelled document picker');
-      return;
-    }
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
 
-    if (!result.assets || result.assets.length === 0) {
-      Alert.alert('Lỗi', 'Không thể lấy thông tin file.');
-      return;
-    }
+      if (result.type !== 'success') {
+        console.log('User cancelled document picker');
+        return;
+      }
 
       const { uri, name, mimeType } = result;
       const file = {
         uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
-        name: name || 'file',
+        name: name || `file-${Date.now()}`,
         type: mimeType || 'application/octet-stream',
       };
 
@@ -209,7 +210,7 @@ const GroupChatScreen = ({ route, navigation }) => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('groupId', groupId);
-      formData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
+      formData.append('type', file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file');
 
       const response = await fetch(`${API_URL}/api/group-chat/`, {
         method: 'POST',
@@ -218,7 +219,6 @@ const GroupChatScreen = ({ route, navigation }) => {
       });
 
       const data = await response.json();
-      console.log('API response:', { status: response.status, data });
       if (response.status === 201) {
         Alert.alert('Thành công', 'Đã gửi file.');
       } else {
@@ -320,7 +320,7 @@ const GroupChatScreen = ({ route, navigation }) => {
     return (
       <TouchableOpacity
         style={[
-          item.contentType === 'text' ? styles.messageContainer : styles.mediaContainer,
+          item.type === 'text' ? styles.messageContainer : styles.mediaContainer,
           isSent ? styles.sentMessage : styles.receivedMessage,
         ]}
         onLongPress={() =>
@@ -355,7 +355,7 @@ const GroupChatScreen = ({ route, navigation }) => {
           )
         ) : (
           <Text style={styles.messageText}>
-            [File: {item.fileUrl ? item.fileUrl.split('/').pop() : 'Không khả dụng!!!'}]
+            [File: {item.fileUrl ? item.fileUrl.split('/').pop() : 'Không khả dụng'}]
           </Text>
         )}
         <Text style={styles.timestamp}>
@@ -411,9 +411,7 @@ const GroupChatScreen = ({ route, navigation }) => {
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         onEndReached={loadMoreMessages}
         onEndReachedThreshold={0.1}
-        ListFooterComponent={
-          loadingMore ? <ActivityIndicator size="small" color="#0068FF" /> : null
-        }
+        ListFooterComponent={loadingMore ? <ActivityIndicator size="small" color="#0068FF" /> : null}
       />
 
       <View style={styles.inputContainer}>
