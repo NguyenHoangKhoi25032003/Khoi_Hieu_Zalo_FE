@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 const Footer = ({ navigation }) => {
   const tabs = [
     { name: 'ChatList', icon: 'chatbubbles', label: 'Tin nhắn', route: 'ChatList' },
-    { name: 'Contacts', icon: 'people', label: 'Danh bạ', route: 'Contacts' },
+    { name: 'Friends', icon: 'people', label: 'Danh bạ', route: 'FriendScreen' },
     { name: 'Explore', icon: 'search', label: 'Khám phá', route: 'Explore' },
     { name: 'Diary', icon: 'book', label: 'Nhật ký', route: 'Diary' },
     { name: 'User', icon: 'person', label: 'Cá nhân', route: 'User' },

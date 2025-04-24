@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { API_URL } from '../config';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import * as Linking from 'expo-linking';
+import { useNavigation } from '@react-navigation/native';
 
 export default function RegisterScreen() {
   const [step, setStep] = useState(1);
@@ -11,7 +10,11 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation();
-  const route = useRoute();
+
+  // Validation functions
+  const validateUsername = (username) => {
+    return username.trim().length >= 3 && /^[a-zA-Z0-9_]+$/.test(username);
+  };
 
   const validateEmail = (email) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -21,40 +24,20 @@ export default function RegisterScreen() {
     return password.length >= 6;
   };
 
-  // Xử lý deep link khi ứng dụng đang mở
-  useEffect(() => {
-    const handleDeepLink = ({ url }) => {
-      const { path, queryParams } = Linking.parse(url);
-      if (path === 'api/auth/verify-email' && queryParams?.token) {
-        navigation.navigate('VerifyEmail', { token: queryParams.token });
-      }
-    };
-
-    // Lắng nghe deep link khi ứng dụng đang mở
-    const subscription = Linking.addEventListener('url', handleDeepLink);
-
-    // Kiểm tra deep link khi ứng dụng được mở từ trạng thái đóng
-    Linking.getInitialURL().then((url) => {
-      if (url) handleDeepLink({ url });
-    });
-
-    return () => subscription.remove();
-  }, [navigation]);
-
   const handleNext = async () => {
     if (step === 1) {
-      if (username.trim() === '') {
-        Alert.alert('Lỗi', 'Vui lòng nhập tên của bạn');
+      if (!validateUsername(username)) {
+        Alert.alert('Lỗi', 'Tên người dùng phải có ít nhất 3 ký tự và chỉ chứa chữ cái, số hoặc dấu gạch dưới.');
         return;
       }
       setStep(2);
     } else if (step === 2) {
       if (!validateEmail(email)) {
-        Alert.alert('Lỗi', 'Vui lòng nhập email hợp lệ');
+        Alert.alert('Lỗi', 'Vui lòng nhập email hợp lệ.');
         return;
       }
       if (!validatePassword(password)) {
-        Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự');
+        Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự.');
         return;
       }
 
@@ -78,12 +61,15 @@ export default function RegisterScreen() {
         if (response.status === 201) {
           setStep(3); // Chuyển sang bước xác nhận email
         } else {
-          Alert.alert('Lỗi', data.message || `Đăng ký thất bại. Mã lỗi: ${response.status}`);
+          Alert.alert('Lỗi', data.message || 'Đăng ký thất bại. Vui lòng thử lại.');
         }
       } catch (error) {
         setLoading(false);
         console.error('Registration error:', error);
-        Alert.alert('Lỗi', 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng và URL API.');
+        Alert.alert(
+          'Lỗi',
+          'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.'
+        );
       }
     }
   };
@@ -99,7 +85,7 @@ export default function RegisterScreen() {
   };
 
   const handleGoToLogin = () => {
-    console.log("Chuyển qua Login");
+    console.log('Chuyển qua Login');
     navigation.navigate('Login');
   };
 
@@ -119,6 +105,7 @@ export default function RegisterScreen() {
             value={username}
             onChangeText={setUsername}
             autoFocus
+            autoCapitalize="none"
           />
           <Text style={styles.note}>
             Lưu ý điều kiện: {'\n'}
@@ -159,10 +146,7 @@ export default function RegisterScreen() {
           <Text style={styles.note}>
             Chúng tôi đã gửi một email xác minh đến {email}. Vui lòng kiểm tra hộp thư (bao gồm thư mục spam) và nhấp vào liên kết để kích hoạt tài khoản.
           </Text>
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={handleGoToLogin}
-          >
+          <TouchableOpacity style={styles.loginButton} onPress={handleGoToLogin}>
             <Text style={styles.loginButtonText}>Quay lại đăng nhập</Text>
           </TouchableOpacity>
         </>
@@ -172,7 +156,7 @@ export default function RegisterScreen() {
         <TouchableOpacity
           style={[
             styles.nextButton,
-            (step === 1 && !username.trim()) ||
+            (step === 1 && !validateUsername(username)) ||
             (step === 2 && (!validateEmail(email) || !validatePassword(password))) ||
             loading
               ? styles.disabledButton
@@ -180,7 +164,7 @@ export default function RegisterScreen() {
           ]}
           onPress={handleNext}
           disabled={
-            (step === 1 && !username.trim()) ||
+            (step === 1 && !validateUsername(username)) ||
             (step === 2 && (!validateEmail(email) || !validatePassword(password))) ||
             loading
           }

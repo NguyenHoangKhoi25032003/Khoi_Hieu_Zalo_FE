@@ -1,71 +1,3 @@
-// import React from 'react';
-// import { NavigationContainer } from '@react-navigation/native';
-// import { createStackNavigator } from '@react-navigation/stack';
-// import ChatList from './Components/ChatList';
-// import User from './Components/User';
-// import Login from './Components/Login';
-// import Sign from './Components/Sign';
-// import VerifyEmail from './Components/VerifyEmailScreen';
-// import ForgotPassword from './Components/ForgotPasswordScreen';
-// import ResetPassword from './Components/ResetPasswordScreen';
-// import EditProfile from './Components/EditProfile';
-// import ChangePassword from './Components/ChangePassword';
-
-// const Stack = createStackNavigator();
-
-// const linking = {
-//   prefixes: ['exp://192.168.1.140:8081', 'http://192.168.1.140:5000', 'http://localhost:5000'],
-//   config: {
-//     screens: {
-//       Login: 'login',
-//       Sign: 'sign',
-//       VerifyEmail: {
-//         path: 'api/auth/verify-email',
-//         parse: {
-//           token: (token) => token,
-//         },
-//       },
-//       ForgotPassword: 'forgot-password',
-//       ResetPassword: {
-//         path: 'reset-password/:token', // Sửa để khớp với link trong email
-//         parse: {
-//           token: (token) => token,
-//         },
-//       },
-//       ChatList: 'chat',
-//       User: 'user',
-//       EditProfile: 'edit-profile',
-//       ChangePassword: 'change-password',
-//     },
-//   },
-// };
-
-// const App = () => {
-//   return (
-//     <NavigationContainer
-//       linking={linking}
-//       onReady={() => console.log('NavigationContainer ready')}
-//       onStateChange={(state) => console.log('Navigation state changed:', state)}
-//     >
-//       <Stack.Navigator initialRouteName="Login">
-//         <Stack.Screen name="Login" component={Login} options={{ title: false, headerShown: false }} />
-//         <Stack.Screen name="Sign" component={Sign} options={{ title: false, headerShown: false }} />
-//         <Stack.Screen name="VerifyEmail" component={VerifyEmail} options={{ headerShown: false }} />
-//         <Stack.Screen name="ForgotPassword" component={ForgotPassword} options={{ headerShown: false }} />
-//         <Stack.Screen name="reset-password/:token" component={ResetPassword} options={{ headerShown: false }} />
-//         <Stack.Screen name="ChatList" component={ChatList} />
-//         <Stack.Screen name="User" component={User} options={{ headerShown: false }} />
-//         <Stack.Screen name="EditProfile" component={EditProfile} options={{ headerShown: false }} />
-//         <Stack.Screen name="ChangePassword" component={ChangePassword} options={{ headerShown: false }} />
-//       </Stack.Navigator>
-//     </NavigationContainer>
-//   );
-// };
-
-// export default App;
-
-
-
 import React, { useEffect } from 'react';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -81,6 +13,10 @@ import EditProfile from './Components/EditProfile';
 import ChangePassword from './Components/ChangePassword';
 import { NETWORK_CONFIG } from './config';
 import ChatScreen from './Components/ChatScreen';
+import FriendScreen from './Components/FriendScreen';
+import CreateGroupScreen from './Components/CreateGroupScreen';
+ import GroupInfoScreen from './Components/GroupInfoScreen';
+ import GroupChatScreen from './Components/GroupChatScreen';
 const Stack = createStackNavigator();
 
 const linking = {
@@ -178,6 +114,10 @@ const App = () => {
         <Stack.Screen name="EditProfile" component={EditProfile} options={{ headerShown: false }} />
         <Stack.Screen name="ChangePassword" component={ChangePassword} options={{ headerShown: false }} />
         <Stack.Screen name="ChatScreen" component={ChatScreen}  options={{ headerShown: false }}/>
+        <Stack.Screen name="FriendScreen" component={FriendScreen}  options={{ headerShown: false }}/>
+        <Stack.Screen name="CreateGroupScreen" component={CreateGroupScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="GroupInfoScreen" component={GroupInfoScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="GroupChatScreen" component={GroupChatScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

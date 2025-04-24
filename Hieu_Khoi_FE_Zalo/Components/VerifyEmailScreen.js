@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { API_URL } from '../config';
 
 export default function VerifyEmailScreen() {
   const navigation = useNavigation();
@@ -19,8 +20,35 @@ export default function VerifyEmailScreen() {
       return;
     }
 
-    setMessage('Xác thực email thành công! Bây giờ bạn có thể đăng nhập.');
-    setLoading(false);
+    // Gửi yêu cầu xác minh email
+    const verifyEmail = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/auth/verify-email?token=${token}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const data = await response.json();
+        console.log('Verify email response:', data, 'Status:', response.status);
+
+        if (response.status === 200) {
+          setMessage('Xác minh email thành công! Bây giờ bạn có thể đăng nhập.');
+        } else {
+          setMessage(data.message || 'Xác minh email thất bại.');
+          Alert.alert('Lỗi', data.message || 'Không thể xác minh email.');
+        }
+      } catch (error) {
+        console.error('Verify email error:', error);
+        setMessage('Không thể kết nối đến server. Vui lòng thử lại.');
+        Alert.alert('Lỗi', 'Không thể kết nối đến server.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    verifyEmail();
   }, [route.params]);
 
   const handleGoToLogin = () => {
