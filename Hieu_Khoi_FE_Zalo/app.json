@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hieu_Khoi_FE_Zalo",
     "slug": "Hieu_Khoi_FE_Zalo",
-   "scheme": "yalo",
+    "scheme": "yalo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,8 +11,19 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-
+      "backgroundColor": "#ffffff",
+      "plugins": [
+        [
+          "expo-notifications",
+          {
+            "icon": "./assets/notification-icon.png",
+            "color": "#40C4FF",
+            "sounds": [
+              "./assets/notification-sound.wav"
+            ]
+          }
+        ]
+      ]
     },
     "ios": {
       "supportsTablet": true,
@@ -26,7 +37,10 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff",
-        "permissions": ["READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"],
+        "permissions": [
+          "READ_EXTERNAL_STORAGE",
+          "WRITE_EXTERNAL_STORAGE"
+        ],
         "package": "com.yourcompany.yalo"
       }
     },

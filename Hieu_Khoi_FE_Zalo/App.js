@@ -17,6 +17,7 @@ import FriendScreen from './Components/FriendScreen';
 import CreateGroupScreen from './Components/CreateGroupScreen';
  import GroupInfoScreen from './Components/GroupInfoScreen';
  import GroupChatScreen from './Components/GroupChatScreen';
+ import { requestNotificationPermissions, setupNotificationListener } from './Components/NotificationHandler';
 const Stack = createStackNavigator();
 
 const linking = {
@@ -92,6 +93,27 @@ const App = () => {
     };
   }, [navigationRef]);
 
+  useEffect(() => {
+    // Yêu cầu quyền thông báo
+    const initNotifications = async () => {
+      try {
+        const granted = await requestNotificationPermissions();
+        if (!granted) {
+          console.warn('Notification permissions not granted');
+        }
+      } catch (error) {
+        console.error('Error requesting notification permissions:', error);
+      }
+    };
+    initNotifications();
+
+    // Lắng nghe tương tác thông báo
+    const unsubscribe = setupNotificationListener((content) => {
+      console.log('Notification clicked:', content);
+    });
+
+    return unsubscribe;
+  }, []);
   return (
     <NavigationContainer
       linking={linking}
